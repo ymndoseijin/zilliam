@@ -1,0 +1,3 @@
+[submodule "deps/comath"]
+	path = deps/comath
+	url = https://github.com/InKryption/comath/

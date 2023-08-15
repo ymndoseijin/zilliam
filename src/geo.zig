@@ -155,6 +155,7 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
         };
 
         pub const geoCtx = simpleCtx(struct {
+            pub const UnOp = enum { @"-" };
             pub const BinOp = enum { @"+", @"-", @"*" };
 
             pub const allow_unused_inputs = true;
@@ -165,12 +166,27 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
                 .@"*" = .{ .prec = 20, .assoc = .left },
             };
 
+            pub fn EvalUnOp(comptime op: []const u8, comptime U: type) type {
+                _ = op;
+                _ = U;
+                return Self;
+            }
+
+            pub fn evalUnOp(_: @This(), comptime op: []const u8, in_val: anytype) EvalUnOp(op, Self) {
+                const val = if (@TypeOf(in_val) != Self) Self.fromInt(in_val) else in_val;
+
+                return switch (@field(UnOp, op)) {
+                    .@"-" => Self.fromInt(-1).mul(val),
+                };
+            }
+
             pub fn EvalBinOp(comptime Lhs: type, comptime op: []const u8, comptime Rhs: type) type {
                 _ = Lhs;
                 _ = op;
                 _ = Rhs;
                 return Self;
             }
+
             pub fn evalBinOp(_: @This(), in_lhs: anytype, comptime op: []const u8, in_rhs: anytype) EvalBinOp(Self, op, Self) {
                 const lhs = if (@TypeOf(in_lhs) != Self) Self.fromInt(in_lhs) else in_lhs;
                 const rhs = if (@TypeOf(in_rhs) != Self) Self.fromInt(in_rhs) else in_rhs;
@@ -275,10 +291,9 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
             var sign = false;
             for (b.tags[0..b.count]) |tag| {
                 const res = multiplyBasisWithSingle(r, tag);
-                //std.debug.print("\nbasis: {any}*e{} = {s}{any}\n", .{ indices[r].tags[0..indices[r].count], tag, if (res[1]) "-" else "", indices[res[0]].tags[0..indices[res[0]].count] });
+
                 r = res[0];
                 sign = res[1] != sign;
-                //std.debug.print("sign now {}\n", .{sign});
             }
             return .{ r, sign };
         }
@@ -291,11 +306,7 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
                 for (b.val, 0..) |b_us, b_i| {
                     if (b_us == 0) continue;
 
-                    //std.debug.print("\nmul: {any}*{any} = ?\n", .{ indices[a_i].tags[0..indices[b_i].count], indices[b_i].tags[0..indices[b_i].count] });
-
                     const res = multiplyBasis(a_i, b_i);
-
-                    //std.debug.print("\nmul: {any}*{any} = {s}{any}\n", .{ indices[a_i].tags[0..indices[a_i].count], indices[b_i].tags[0..indices[b_i].count], if (res[1]) "-" else "", indices[res[0]].tags[0..indices[res[0]].count] });
 
                     const sign: T = if (res[1]) -1 else 1;
                     const a_scalar: T = @intCast(a_us);
@@ -323,6 +334,7 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
             var r: Self = undefined;
             var a_vec: @Vector(basis_num + 1, T) = a.val;
             var b_vec: @Vector(basis_num + 1, T) = b.val;
+
             r.val = a_vec - b_vec;
 
             return r;
@@ -333,31 +345,56 @@ pub fn Algebra(comptime T: type, comptime dim: usize) type {
 test "algebra" {
     const Alg = Algebra(i32, 2);
 
-    var res = Alg.mul(.{ .val = .{ 2, 0, 3, 0 } }, .{ .val = .{ 0, 2, 0, 0 } }); // (3e12+2e1) * (2e2)
-    try std.testing.expectEqualSlices(i32, &.{ 6, 0, 4, 0 }, &res.val); // 6e1+4e12
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(3*e12+2*e1)*(2*e2)")).val,
+        &(try Alg.evalBasis("6*e1+4*e12")).val,
+    );
 
-    res = Alg.mul(.{ .val = .{ 2, 0, 3, 0 } }, .{ .val = .{ 0, 2, 0, 1 } }); // (3e12+2e1) * (2e2+1)
-    try std.testing.expectEqualSlices(i32, &.{ 8, 0, 7, 0 }, &res.val); // 8e1+7e12
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(3*e12+2*e1)*(2*e2+1)")).val,
+        &(try Alg.evalBasis("8*e1+7*e12")).val,
+    );
 
-    res = Alg.mul(.{ .val = .{ 2, 0, 3, 0 } }, .{ .val = .{ 1, 0, 0, 0 } }); // (3e12+2e1) * (e1)
-    try std.testing.expectEqualSlices(i32, &.{ 0, -3, 0, 2 }, &res.val); // -3e2+2
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(3*e12+2*e1)*e1")).val,
+        &(try Alg.evalBasis("-3*e2+2")).val,
+    );
 
-    res = Alg.mul(.{ .val = .{ 2, 0, 3, 0 } }, .{ .val = .{ 1, 2, 0, 0 } }); // (3e12+2e1) * (e1+2e2)
-    try std.testing.expectEqualSlices(i32, &.{ 6, -3, 4, 2 }, &res.val); // -3e2+2
-    res = Alg.mul(.{ .val = .{ 0, 0, 3, 0 } }, .{ .val = .{ 0, 0, 5, 0 } }); // (3e12) * (5e12)
-    try std.testing.expectEqualSlices(i32, &.{ 0, 0, 0, -15 }, &res.val); // -3e2+2
+    // 6*e1-3*e2+4*e12+2 = 6*e1-3*e2-4*e12-2???
+    // temp: "6*e1-(3*e2)+4*e12+2 seems to fix it (it's a comath bug)
 
-    res = Alg.mul(.{ .val = .{ 2, 0, 0, 0 } }, .{ .val = .{ 0, 0, 5, 0 } }); // (2e1) * (5e12)
-    try std.testing.expectEqualSlices(i32, &.{ 0, 10, 0, 0 }, &res.val); // 10e2
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(2*e1+3*e12)*(e1+2*e2)")).val,
+        &(try Alg.evalBasis("6*e1-(3*e2)+4*e12+2")).val,
+    );
 
-    res = Alg.mul(.{ .val = .{ 2, 3, 5, 7 } }, .{ .val = .{ 11, 13, 17, 19 } }); // (2*e1+3*e2+5*e12+7) * (11*e1+13*e2+17*e12+19)
-    try std.testing.expectEqualSlices(i32, &.{ 129, 127, 207, 109 }, &res.val); // (129e1) + (127e2) + (207e12) + 109
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(3*e12)*(5*e12)")).val,
+        &(try Alg.evalBasis("-15")).val,
+    );
 
-    res = Alg.mul(.{ .val = .{ 2, 3, 5, 0 } }, .{ .val = .{ 11, 13, 17, 0 } }); // (2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)
-    try std.testing.expectEqualSlices(i32, &.{ 14, -21, -7, -24 }, &res.val); // (14e1) - (21e2) - (7e12) - 24
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(2*e1)*(5*e12)")).val,
+        &(try Alg.evalBasis("10*e2")).val,
+    );
 
-    res = Alg.add(.{ .val = .{ 4, 3, 2, 1 } }, .{ .val = .{ 0, 1, 2, 3 } });
-    try std.testing.expectEqualSlices(i32, &.{ 4, 4, 4, 4 }, &res.val);
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(2*e1)*(5*e12)")).val,
+        &(try Alg.evalBasis("10*e2")).val,
+    );
+
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("(14*e1) - (21*e2) - (7*e12) - 24")).val,
+        &(try Alg.evalBasis("(2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)")).val,
+    );
 
     try std.testing.expectEqualSlices(
         i32,

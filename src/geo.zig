@@ -44,12 +44,12 @@ pub fn getBasis(comptime R: type, comptime dim: usize) R {
     }
     return indices;
 }
-pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime null_dim: usize) type {
-    const sum_of_dim = pos_dim + null_dim;
+pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usize, comptime null_dim: usize) type {
+    const sum_of_dim = null_dim + pos_dim + neg_dim;
     const basis_num = (2 << (sum_of_dim - 1)) - 1;
 
     const Data = struct {
-        // .{n_1, ..., n_{neg_dim}, z_1, ..., z_{null_dim}, p_1, ..., p_{pos_dim}, scalar}
+        // .{scalar, z_1, ..., z_{null_dim}, p_1, ..., p_{pos_dim}, n_1, ..., n_{neg_dim}}
         tags: [sum_of_dim]usize,
         count: usize,
     };
@@ -227,14 +227,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime null_dim: usi
                         index += 1;
                     }
 
-                    if (null_dim >= b_dim and b_dim > 0) {
+                    if (null_dim >= b_dim or quadratic_form == .zero) {
                         return .{ b_dim, .zero };
-                    }
-
-                    switch (quadratic_form) {
-                        .zero => return .{ b_dim, .zero },
-                        .neg => swap = !swap,
-                        .pos => {},
+                    } else if (b_dim > null_dim + pos_dim or quadratic_form == .neg) {
+                        swap = !swap;
                     }
 
                     for (pos + 1..a_len) |idx| {
@@ -377,7 +373,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime null_dim: usi
 }
 
 test "algebra" {
-    const Alg = Algebra(i32, 2, 1);
+    const Alg = Algebra(i32, 2, 1, 1);
 
     try std.testing.expectEqualSlices(
         i32,
@@ -468,19 +464,26 @@ test "algebra" {
         &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) * (31*e0+11*e1+13*e2+17*e12+19)")).val,
     );
 
+    // negative
+    try std.testing.expectEqualSlices(
+        i32,
+        &Alg.fromInt(-1).val,
+        &(try Alg.evalBasis("e3*e3")).val,
+    );
+
+    try std.testing.expectEqualSlices(
+        i32,
+        &Alg.fromInt(0).val,
+        &(try Alg.evalBasis("e3^e3")).val,
+    );
+
     // hodge
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("5*e0 + 3*e01 + -2*e02 + 11*e12 + 7*e012")).val,
+        &(try Alg.evalBasis("5*e03 + 3*e013 + -2*e023 + 11*e123 + 7*e0123")).val,
         &(try Alg.evalBasis("11*e0+2*e1+3*e2+5*e12+7")).hodge().val,
     );
 
-    try std.testing.expectEqualSlices(
-        i32,
-        &(try Alg.evalBasis("e12")).val,
-        &(try Alg.evalBasis("e0")).hodge().val,
-    );
-
     var buff: [1024]u8 = undefined;
-    std.debug.print("\n{s}\n", .{try (try Alg.evalBasis("e0")).hodge().print(&buff)});
+    std.debug.print("\n{s}\n", .{try (try Alg.evalBasis("e3*e3")).print(&buff)});
 }

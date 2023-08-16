@@ -3,6 +3,38 @@ const comath = @import("comath");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
+fn SpreadResult(comptime Base: type, comptime Additional: type) type {
+    var fields = @typeInfo(Base).Struct.fields;
+
+    const additional_fields = @typeInfo(Additional).Struct.fields;
+    @setEvalBranchQuota(additional_fields.len * fields.len * 10);
+    for (additional_fields) |field| {
+        if (@hasField(Base, field.name)) continue;
+        fields = fields ++ &[_]std.builtin.Type.StructField{field};
+    }
+
+    return @Type(.{ .Struct = .{
+        .is_tuple = false,
+        .layout = .Auto,
+        .backing_integer = null,
+        .decls = &.{},
+        .fields = fields,
+    } });
+}
+
+fn spread(
+    base: anytype,
+    additional: anytype,
+) SpreadResult(@TypeOf(base), @TypeOf(additional)) {
+    const Base = @TypeOf(base);
+    const Additional = @TypeOf(additional);
+    var result: SpreadResult(Base, Additional) = undefined;
+    inline for (@typeInfo(Additional).Struct.fields) |field| {
+        @field(result, field.name) = @field(additional, field.name);
+    }
+    return result;
+}
+
 fn basisRecursion(comptime dim: usize, start: usize, num: usize, length: usize, decls: anytype, index: *usize, tags: [dim]usize) void {
     if (num >= length - 1) {
         decls[index.*].count = length;
@@ -172,8 +204,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             }
         }{});
 
-        pub fn evalBasis(comptime input: []const u8) !Self {
-            return try comath.eval(input, geoCtx, Blades);
+        pub fn eval(comptime input: []const u8, comptime args: anytype) !Self {
+            return try comath.eval(input, geoCtx, spread(Blades, args));
         }
 
         pub fn fromInt(num: anytype) Self {
@@ -314,7 +346,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         // needs to be optimized
-        pub fn inCommon(i: usize, j: usize) bool {
+        fn inCommon(i: usize, j: usize) bool {
             const blade_a = indices[i];
             const blade_b = indices[j];
 
@@ -542,8 +574,8 @@ test "regular algebra" {
     // regressive product
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("-e3")).val,
-        &(try Alg.evalBasis("e13 & -e23")).val,
+        &(try Alg.eval("-e3", .{})).val,
+        &(try Alg.eval("e13 & -e23", .{})).val,
     );
 }
 
@@ -552,20 +584,20 @@ test "algebra" {
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(3*e12+2*e1)*(2*e2)")).val,
-        &(try Alg.evalBasis("6*e1+4*e12")).val,
+        &(try Alg.eval("(3*e12+2*e1)*(2*e2)", .{})).val,
+        &(try Alg.eval("6*e1+4*e12", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(3*e12+2*e1)*(2*e2+1)")).val,
-        &(try Alg.evalBasis("8*e1+7*e12")).val,
+        &(try Alg.eval("(3*e12+2*e1)*(2*e2+1)", .{})).val,
+        &(try Alg.eval("8*e1+7*e12", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(3*e12+2*e1)*e1")).val,
-        &(try Alg.evalBasis("-3*e2+2")).val,
+        &(try Alg.eval("(3*e12+2*e1)*e1", .{})).val,
+        &(try Alg.eval("-3*e2+2", .{})).val,
     );
 
     // 6*e1-3*e2+4*e12+2 = 6*e1-3*e2-4*e12-2???
@@ -573,90 +605,90 @@ test "algebra" {
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(2*e1+3*e12)*(e1+2*e2)")).val,
-        &(try Alg.evalBasis("6*e1-(3*e2)+4*e12+2")).val,
+        &(try Alg.eval("(2*e1+3*e12)*(e1+2*e2)", .{})).val,
+        &(try Alg.eval("6*e1-(3*e2)+4*e12+2", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(-15).val,
-        &(try Alg.evalBasis("(3*e12)*(5*e12)")).val,
+        &(try Alg.eval("(3*e12)*(5*e12)", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(2*e1)*(5*e12)")).val,
-        &(try Alg.evalBasis("10*e2")).val,
+        &(try Alg.eval("(2*e1)*(5*e12)", .{})).val,
+        &(try Alg.eval("10*e2", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(2*e1)*(5*e12)")).val,
-        &(try Alg.evalBasis("10*e2")).val,
+        &(try Alg.eval("(2*e1)*(5*e12)", .{})).val,
+        &(try Alg.eval("10*e2", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("(14*e1) - (21*e2) - (7*e12) - 24")).val,
-        &(try Alg.evalBasis("(2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)")).val,
+        &(try Alg.eval("(14*e1) - (21*e2) - (7*e12) - 24", .{})).val,
+        &(try Alg.eval("(2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("129*e1 + 127*e2 + 207*e12 + 109")).val,
-        &(try Alg.evalBasis("(2*e1+3*e2+5*e12+7) * (11*e1+13*e2+17*e12+19)")).val,
+        &(try Alg.eval("129*e1 + 127*e2 + 207*e12 + 109", .{})).val,
+        &(try Alg.eval("(2*e1+3*e2+5*e12+7) * (11*e1+13*e2+17*e12+19)", .{})).val,
     );
 
     // wedge
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("133 + (115*e1) + (148*e2) + (207*e12)")).val,
-        &(try Alg.evalBasis("(2*e1+3*e2+5*e12+7) ^ (11*e1+13*e2+17*e12+19)")).val,
+        &(try Alg.eval("133 + (115*e1) + (148*e2) + (207*e12)", .{})).val,
+        &(try Alg.eval("(2*e1+3*e2+5*e12+7) ^ (11*e1+13*e2+17*e12+19)", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(0).val,
-        &(try Alg.evalBasis("(2*e1)^(5*e12)")).val,
+        &(try Alg.eval("(2*e1)^(5*e12)", .{})).val,
     );
 
     // null
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(0).val,
-        &(try Alg.evalBasis("e0*e0")).val,
+        &(try Alg.eval("e0*e0", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(0).val,
-        &(try Alg.evalBasis("e0^e0")).val,
+        &(try Alg.eval("e0^e0", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("654*e0 + 129*e1 + 127*e2 + 191*e01 + 206*e02 + 207*e12 + 546*e012 + 109")).val,
-        &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) * (31*e0+11*e1+13*e2+17*e12+19)")).val,
+        &(try Alg.eval("654*e0 + 129*e1 + 127*e2 + 191*e01 + 206*e02 + 207*e12 + 546*e012 + 109", .{})).val,
+        &(try Alg.eval("(23*e0+2*e1+3*e2+5*e12+7) * (31*e0+11*e1+13*e2+17*e12+19)", .{})).val,
     );
 
     // negative
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(-1).val,
-        &(try Alg.evalBasis("e3*e3")).val,
+        &(try Alg.eval("e3*e3", .{})).val,
     );
 
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(0).val,
-        &(try Alg.evalBasis("e3^e3")).val,
+        &(try Alg.eval("e3^e3", .{})).val,
     );
 
     // hodge
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("5*e03 + 3*e013 + -2*e023 + 11*e123 + 7*e0123")).val,
-        &(try Alg.evalBasis("11*e0+2*e1+3*e2+5*e12+7")).hodge().val,
+        &(try Alg.eval("5*e03 + 3*e013 + -2*e023 + 11*e123 + 7*e0123", .{})).val,
+        &(try Alg.eval("11*e0+2*e1+3*e2+5*e12+7", .{})).hodge().val,
     );
 
     const big = "(1 + 2*e0 + 3*e1 + 4*e2 + 5*e3 + 6*e01 + 7*e02 + 8*e03+ 9*e12+ 10*e13+ 11*e23 + 12*e012+ 13*e013 + 14*e023 + 15*e123+ 16*e0123)";
@@ -664,49 +696,49 @@ test "algebra" {
     // reverse
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("1 + 2*e0 + 3*e1 + 4*e2 + 5*e3 + -6*e01 + -7*e02 + -8*e03 + -9*e12 + -10*e13 + -11*e23 + -12*e012 + -13*e013 + -14*e023 + -15*e123 + 16*e0123")).val,
-        &(try Alg.evalBasis("~" ++ big)).val,
+        &(try Alg.eval("1 + 2*e0 + 3*e1 + 4*e2 + 5*e3 + -6*e01 + -7*e02 + -8*e03 + -9*e12 + -10*e13 + -11*e23 + -12*e012 + -13*e013 + -14*e023 + -15*e123 + 16*e0123", .{})).val,
+        &(try Alg.eval("~" ++ big, .{})).val,
     );
 
     // grade projection
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("6*e01 + 7*e02 + 8*e03 + 9*e12+ 10*e13 + 11*e23")).val,
-        &(try Alg.evalBasis(big ++ " $ 2")).val,
+        &(try Alg.eval("6*e01 + 7*e02 + 8*e03 + 9*e12+ 10*e13 + 11*e23", .{})).val,
+        &(try Alg.eval(big ++ " $ 2", .{})).val,
     );
 
     // abs2
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(2).val,
-        &(try Alg.evalBasis("1+e1")).abs2().val,
+        &(try Alg.eval("1+e1", .{})).abs2().val,
     );
 
     // dual
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("-e023")).val,
-        &(try Alg.evalBasis("*e1")).val,
+        &(try Alg.eval("-e023", .{})).val,
+        &(try Alg.eval("*e1", .{})).val,
     );
 
     // undual
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("e023")).val,
-        &(try Alg.evalBasis("%e1")).val,
+        &(try Alg.eval("e023", .{})).val,
+        &(try Alg.eval("%e1", .{})).val,
     );
 
     // inner product
     try std.testing.expectEqualSlices(
         i32,
-        &(try Alg.evalBasis("109 + 654*e0 + 129*e1 + 127*e2 + 214*e12")).val,
-        &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) | (31*e0+11*e1+13*e2+17*e12+19)")).val,
+        &(try Alg.eval("(109 + 654*e0 + 129*e1 + 127*e2 + 214*e12)*2", .{})).val,
+        &(try Alg.eval("((23*e0+2*e1+3*e2+5*e12+7) | (31*e0+11*e1+13*e2+17*e12+19))*a", .{ .a = 2 })).val,
     );
 
     // regressive product
     try std.testing.expectEqualSlices(
         i32,
         &Alg.fromInt(0).val,
-        &(try Alg.evalBasis("(e13) & (-e23)")).val,
+        &(try Alg.eval("(e13) & (-e23)", .{})).val,
     );
 }

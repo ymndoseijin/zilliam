@@ -10,8 +10,8 @@ It currently has the following operations:
 - *a: dual
 - a|b: inner product
 - #a: grade involution
-- a$k: grade projection this is slightly cursed I'm not sure whether I'll keep it
-- %a: undual this is also not ideal
+- a$k: grade projection
+- %a: undual
 
 In the future,  I will try to find a way to generate SIMD code for the operations instead of doing it manually (like in [klein](https://github.com/jeremyong/klein)).
 

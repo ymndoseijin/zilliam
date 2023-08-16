@@ -71,7 +71,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime null_dim: usi
         pub const Inputs = blk: {
             var fields: [basis_num]std.builtin.Type.StructField = undefined;
             for (indices[1 .. basis_num + 1], 0..) |basis, i| {
-                var buff: [sum_of_dim * basis_num + 1024]u8 = undefined;
+                var buff: [1024]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buff);
                 var alloc = fba.allocator();
                 var name = std.ArrayList(u8).init(alloc);
@@ -305,6 +305,33 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime null_dim: usi
             return a.anticommute(.zero, b);
         }
 
+        pub fn print(a: Self, buff: []u8) ![]const u8 {
+            var fba = std.heap.FixedBufferAllocator.init(buff);
+            var alloc = fba.allocator();
+            var name = std.ArrayList(u8).init(alloc);
+            var writer = name.writer();
+
+            for (a.val, 0..) |val, index| {
+                if (val == 0) continue;
+                if (name.items.len != 0) {
+                    _ = try writer.print(" + ", .{});
+                }
+                if (index == 0) {
+                    _ = try writer.print("{}", .{val});
+                } else {
+                    const basis = indices[index];
+                    _ = try writer.print("{}e", .{val});
+                    for (basis.tags[0..basis.count]) |basis_idx| {
+                        var actual: i32 = @intCast(basis_idx);
+                        actual -= @intCast(null_dim);
+                        _ = try writer.print("{}", .{actual});
+                    }
+                }
+            }
+
+            return name.items;
+        }
+
         pub fn hodge(a: Self) Self {
             var r: Self = undefined;
 
@@ -441,9 +468,19 @@ test "algebra" {
         &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) * (31*e0+11*e1+13*e2+17*e12+19)")).val,
     );
 
+    // hodge
     try std.testing.expectEqualSlices(
         i32,
         &(try Alg.evalBasis("5*e0 + 3*e01 + -2*e02 + 11*e12 + 7*e012")).val,
         &(try Alg.evalBasis("11*e0+2*e1+3*e2+5*e12+7")).hodge().val,
     );
+
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("e12")).val,
+        &(try Alg.evalBasis("e0")).hodge().val,
+    );
+
+    var buff: [1024]u8 = undefined;
+    std.debug.print("\n{s}\n", .{try (try Alg.evalBasis("e0")).hodge().print(&buff)});
 }

@@ -106,17 +106,29 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             }){};
         };
 
+        // a*b: geo
+        // ~a: reverse
+        // a^b: wedge
+        // a&b: regressive
+        // *a: dual
+        // a|b: inner product
+        // #a: grade involution
+        // a$k: grade projection this is slightly cursed I'm not sure whether I'll keep it
+        // %a: undual this is also not ideal
         pub const geoCtx = simpleCtx(struct {
-            pub const UnOp = enum { @"-" };
-            pub const BinOp = enum { @"+", @"-", @"*", @"^" };
+            pub const UnOp = enum { @"#", @"~", @"-", @"*", @"%" };
+            pub const BinOp = enum { @"+", @"-", @"*", @"^", @"$", @"|", @"&" };
 
             pub const allow_unused_inputs = true;
 
             pub const relations = .{
                 .@"+" = .{ .prec = 10, .assoc = .left },
                 .@"-" = .{ .prec = 10, .assoc = .left },
+                .@"$" = .{ .prec = 10, .assoc = .left },
                 .@"*" = .{ .prec = 20, .assoc = .left },
+                .@"|" = .{ .prec = 20, .assoc = .left },
                 .@"^" = .{ .prec = 20, .assoc = .left },
+                .@"&" = .{ .prec = 20, .assoc = .left },
             };
 
             pub fn EvalUnOp(comptime op: []const u8, comptime U: type) type {
@@ -130,6 +142,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
                 return switch (@field(UnOp, op)) {
                     .@"-" => Self.fromInt(-1).mul(val),
+                    .@"~" => val.reverse(),
+                    .@"#" => val.grade_involution(),
+                    .@"*" => val.dual(),
+                    .@"%" => val.undual(),
                 };
             }
 
@@ -149,6 +165,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     .@"-" => lhs.sub(rhs),
                     .@"*" => lhs.mul(rhs),
                     .@"^" => lhs.wedge(rhs),
+                    .@"&" => lhs.regressive(rhs),
+                    .@"|" => lhs.inner(rhs),
+                    .@"$" => lhs.grade_projection(in_rhs) catch @panic("Invalid K"),
                 };
             }
         }{});
@@ -267,6 +286,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return .{ r, sign };
         }
 
+        // TODO: simd
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
             var r: Self = undefined;
             var vec: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
@@ -293,12 +313,121 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return r;
         }
 
+        // needs to be optimized
+        pub fn inCommon(i: usize, j: usize) bool {
+            const blade_a = indices[i];
+            const blade_b = indices[j];
+
+            var in_common = true;
+
+            for (blade_a.tags[0..blade_a.count]) |tag_a| {
+                var tag_not = true;
+                for (blade_b.tags[0..blade_b.count]) |tag_b| {
+                    if (tag_a == tag_b) {
+                        tag_not = false;
+                        break;
+                    }
+                }
+                if (tag_not) {
+                    in_common = false;
+                    break;
+                }
+            }
+
+            return in_common;
+        }
+
+        // TODO: simd
+        pub fn inner(a: Self, b: Self) Self {
+            var r: Self = undefined;
+            var vec: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
+            for (a.val, 0..) |a_us, a_i| {
+                if (a_us == 0) continue;
+                for (b.val, 0..) |b_us, b_i| {
+                    if (b_us == 0) continue;
+
+                    if (inCommon(a_i, b_i) or inCommon(b_i, a_i)) {
+                        const res = multiplyBasis(.pos, a_i, b_i);
+
+                        const sign: T = switch (res[1]) {
+                            .pos => 1,
+                            .neg => -1,
+                            .zero => 0,
+                        };
+                        const a_scalar: T = @intCast(a_us);
+                        const b_scalar: T = @intCast(b_us);
+
+                        vec[res[0]] += a_scalar * b_scalar * sign;
+                    } else {
+                        continue;
+                    }
+                }
+            }
+            r.val = vec;
+
+            return r;
+        }
+
         pub fn mul(a: Self, b: Self) Self {
             return a.anticommute(.pos, b);
         }
 
+        pub fn regressive(a: Self, b: Self) Self {
+            return a.dual().wedge(b.dual()).undual();
+        }
+
         pub fn wedge(a: Self, b: Self) Self {
             return a.anticommute(.zero, b);
+        }
+
+        pub fn grade_involution(a: Self) Self {
+            var res = Self{};
+            for (a.val, 0..) |blade, i| {
+                const len = indices[i].count;
+                if (len % 2 == 0) {
+                    res.val[i] = blade;
+                } else {
+                    res.val[i] = -blade;
+                }
+            }
+            return res;
+        }
+
+        pub fn reverse(a: Self) Self {
+            var res = Self{};
+            for (a.val, 0..) |blade, i| {
+                const len = indices[i].count;
+                if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
+                    res.val[i] = blade;
+                } else {
+                    res.val[i] = -blade;
+                }
+            }
+            return res;
+        }
+
+        pub fn grade_projection(a: Self, k_in: usize) !Self {
+            var res = Self{};
+
+            switch (k_in) {
+                0...sum_of_dim => |k| {
+                    // TODO: simd
+                    inline for (indices, 0..) |blade, i| {
+                        if (blade.count == k) {
+                            res.val[i] = a.val[i];
+                        }
+                    }
+                },
+                else => {
+                    return error.InvalidK;
+                },
+            }
+
+            return res;
+        }
+
+        pub fn abs2(a: Self) Self {
+            return a.reverse().mul(a).grade_projection(0) catch unreachable;
         }
 
         pub fn print(a: Self, buff: []u8) ![]const u8 {
@@ -328,11 +457,46 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return name.items;
         }
 
+        pub fn dual(a: Self) Self {
+            if (null_dim == 0) {
+                var pseudo_scalar = Self{};
+                pseudo_scalar.val[basis_num] = 1;
+                return a.mul(pseudo_scalar);
+            }
+            return a.hodge();
+        }
+
+        pub fn undual(a: Self) Self {
+            if (null_dim == 0) {
+                var pseudo_scalar = Self{};
+                pseudo_scalar.val[basis_num] = 1;
+                return a.mul(pseudo_scalar.reverse());
+            }
+            return a.unhodge();
+        }
+
         pub fn hodge(a: Self) Self {
             var r: Self = undefined;
 
             for (a.val, 0..) |scalar, i| {
                 const res = multiplyBasis(.pos, i, basis_num - i);
+
+                const sign: T = switch (res[1]) {
+                    .pos => 1,
+                    .neg => -1,
+                    .zero => 0,
+                };
+
+                r.val[basis_num - i] = sign * scalar;
+            }
+            return r;
+        }
+
+        pub fn unhodge(a: Self) Self {
+            var r: Self = undefined;
+
+            for (a.val, 0..) |scalar, i| {
+                const res = multiplyBasis(.pos, basis_num - i, i);
 
                 const sign: T = switch (res[1]) {
                     .pos => 1,
@@ -370,6 +534,17 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return r;
         }
     };
+}
+
+test "regular algebra" {
+    const Alg = Algebra(i32, 3, 0, 0);
+
+    // regressive product
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("-e3")).val,
+        &(try Alg.evalBasis("e13 & -e23")).val,
+    );
 }
 
 test "algebra" {
@@ -482,5 +657,56 @@ test "algebra" {
         i32,
         &(try Alg.evalBasis("5*e03 + 3*e013 + -2*e023 + 11*e123 + 7*e0123")).val,
         &(try Alg.evalBasis("11*e0+2*e1+3*e2+5*e12+7")).hodge().val,
+    );
+
+    const big = "(1 + 2*e0 + 3*e1 + 4*e2 + 5*e3 + 6*e01 + 7*e02 + 8*e03+ 9*e12+ 10*e13+ 11*e23 + 12*e012+ 13*e013 + 14*e023 + 15*e123+ 16*e0123)";
+
+    // reverse
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("1 + 2*e0 + 3*e1 + 4*e2 + 5*e3 + -6*e01 + -7*e02 + -8*e03 + -9*e12 + -10*e13 + -11*e23 + -12*e012 + -13*e013 + -14*e023 + -15*e123 + 16*e0123")).val,
+        &(try Alg.evalBasis("~" ++ big)).val,
+    );
+
+    // grade projection
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("6*e01 + 7*e02 + 8*e03 + 9*e12+ 10*e13 + 11*e23")).val,
+        &(try Alg.evalBasis(big ++ " $ 2")).val,
+    );
+
+    // abs2
+    try std.testing.expectEqualSlices(
+        i32,
+        &Alg.fromInt(2).val,
+        &(try Alg.evalBasis("1+e1")).abs2().val,
+    );
+
+    // dual
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("-e023")).val,
+        &(try Alg.evalBasis("*e1")).val,
+    );
+
+    // undual
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("e023")).val,
+        &(try Alg.evalBasis("%e1")).val,
+    );
+
+    // inner product
+    try std.testing.expectEqualSlices(
+        i32,
+        &(try Alg.evalBasis("109 + 654*e0 + 129*e1 + 127*e2 + 214*e12")).val,
+        &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) | (31*e0+11*e1+13*e2+17*e12+19)")).val,
+    );
+
+    // regressive product
+    try std.testing.expectEqualSlices(
+        i32,
+        &Alg.fromInt(0).val,
+        &(try Alg.evalBasis("(e13) & (-e23)")).val,
     );
 }

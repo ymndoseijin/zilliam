@@ -68,7 +68,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         const Self = @This();
         pub const Indices = indices;
 
-        pub const Inputs = blk: {
+        pub const Blades = blk: {
             var fields: [basis_num]std.builtin.Type.StructField = undefined;
             for (indices[1 .. basis_num + 1], 0..) |basis, i| {
                 var buff: [1024]u8 = undefined;
@@ -154,7 +154,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }{});
 
         pub fn evalBasis(comptime input: []const u8) !Self {
-            return try comath.eval(input, geoCtx, Inputs);
+            return try comath.eval(input, geoCtx, Blades);
         }
 
         pub fn fromInt(num: anytype) Self {
@@ -483,7 +483,4 @@ test "algebra" {
         &(try Alg.evalBasis("5*e03 + 3*e013 + -2*e023 + 11*e123 + 7*e0123")).val,
         &(try Alg.evalBasis("11*e0+2*e1+3*e2+5*e12+7")).hodge().val,
     );
-
-    var buff: [1024]u8 = undefined;
-    std.debug.print("\n{s}\n", .{try (try Alg.evalBasis("e3*e3")).print(&buff)});
 }

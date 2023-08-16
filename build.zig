@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const my_local_dep = b.anonymousDependency("deps/comath/", @import("deps/comath/build.zig"), .{
+    const comath_dep = b.dependency("comath", .{
         .target = target,
         .optimize = optimize,
     });
@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addModule("comath", my_local_dep.module("comath"));
+    exe.addModule("comath", comath_dep.module("comath"));
 
     b.installArtifact(exe);
 
@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    unit_tests.addModule("comath", my_local_dep.module("comath"));
+    unit_tests.addModule("comath", comath_dep.module("comath"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

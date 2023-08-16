@@ -1,0 +1,10 @@
+.{
+    .name = "zilliam",
+    .version = "0.0.1",
+    .dependencies = .{
+        .comath = .{
+            .url = "https://github.com/InKryption/comath/archive/1f9e2061c92b1275be1ff7147db83a82b288830b.tar.gz",
+            .hash = "1220f0a2317117a0d07b61f5605abe8c1f72936414f30f6fa61511e9ca99f233b89d",
+        },
+    },
+}

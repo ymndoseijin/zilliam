@@ -100,8 +100,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         const Self = @This();
         pub const Indices = indices;
 
-        pub const Blades = blk: {
-            var fields: [basis_num]std.builtin.Type.StructField = undefined;
+        const blade_types = blk: {
+            var struct_fields: [basis_num]std.builtin.Type.StructField = undefined;
+            var enum_fields: [basis_num]std.builtin.Type.EnumField = undefined;
+
             for (indices[1 .. basis_num + 1], 0..) |basis, i| {
                 var buff: [1024]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buff);
@@ -119,24 +121,52 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 var res = Self{};
                 res.val[i + 1] = 1;
 
-                fields[i] = .{
+                struct_fields[i] = .{
                     .name = name.items,
                     .type = Self,
                     .default_value = @ptrCast(&res),
                     .is_comptime = true,
                     .alignment = 1,
                 };
+
+                enum_fields[i] = .{
+                    .name = name.items,
+                    .value = i,
+                };
             }
 
-            break :blk @Type(.{
+            const blade_struct = @Type(.{
                 .Struct = .{
                     .layout = .Auto,
-                    .fields = &fields,
+                    .fields = &struct_fields,
                     .decls = &.{},
                     .is_tuple = false,
                 },
             }){};
+
+            const blade_enum = @Type(.{
+                .Enum = .{
+                    .tag_type = @Type(.{
+                        .Int = .{ .signedness = .unsigned, .bits = basis_num },
+                    }),
+                    .fields = &enum_fields,
+                    .decls = &.{},
+                    .is_exhaustive = false,
+                },
+            });
+            break :blk .{ blade_struct, blade_enum };
         };
+
+        pub const Blades = blade_types[0];
+        pub const BladeEnum = blade_types[1];
+
+        pub fn get(a: Self, blade: BladeEnum) T {
+            return a.val[@intFromEnum(blade) + 1];
+        }
+
+        pub fn set(a: *Self, blade: BladeEnum, val: T) void {
+            a.val[@intFromEnum(blade) + 1] = val;
+        }
 
         // a*b: geo
         // ~a: reverse
@@ -445,38 +475,38 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return a.anticommute(.zero, b);
         }
 
-        const grade_mask: @Vector(basis_num + 1, T) = blk: {
-            var temp: [basis_num + 1]T = undefined;
-            for (&temp, 0..) |*val, i| {
-                const len = indices[i].count;
-                if (len % 2 == 0) {
-                    val.* = 1;
-                } else {
-                    val.* = -1;
-                }
-            }
-            break :blk temp;
-        };
-
         pub fn grade_involution(a: Self) Self {
-            return Self{ .val = a.val * grade_mask };
+            const mask: @Vector(basis_num + 1, T) = comptime blk: {
+                var temp: [basis_num + 1]T = undefined;
+                for (&temp, 0..) |*val, i| {
+                    const len = indices[i].count;
+                    if (len % 2 == 0) {
+                        val.* = 1;
+                    } else {
+                        val.* = -1;
+                    }
+                }
+                break :blk temp;
+            };
+
+            return Self{ .val = a.val * mask };
         }
 
-        const reverse_mask: @Vector(basis_num + 1, T) = blk: {
-            var temp: [basis_num + 1]T = undefined;
-            for (&temp, 0..) |*val, i| {
-                const len = indices[i].count;
-                if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
-                    val.* = 1;
-                } else {
-                    val.* = -1;
-                }
-            }
-            break :blk temp;
-        };
-
         pub fn reverse(a: Self) Self {
-            return Self{ .val = a.val * reverse_mask };
+            const mask: @Vector(basis_num + 1, T) = comptime blk: {
+                var temp: [basis_num + 1]T = undefined;
+                for (&temp, 0..) |*val, i| {
+                    const len = indices[i].count;
+                    if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
+                        val.* = 1;
+                    } else {
+                        val.* = -1;
+                    }
+                }
+                break :blk temp;
+            };
+
+            return Self{ .val = a.val * mask };
         }
 
         pub fn grade_projection(a: Self, k_in: usize) !Self {
@@ -555,26 +585,36 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return a.unhodge();
         }
 
-        pub fn hodge(a: Self) Self {
-            var r: Self = undefined;
-
-            for (a.val, 0..) |scalar, i| {
-                const res = memoizedMultiplyBasis(.pos, i, basis_num - i);
-
-                r.val[basis_num - i] = res[1] * scalar;
+        const shuffle_mask: @Vector(basis_num + 1, T) = blk: {
+            var temp: [basis_num + 1]i32 = undefined;
+            for (0..basis_num + 1) |i| {
+                temp[i] = basis_num - i;
             }
-            return r;
+            break :blk temp;
+        };
+
+        pub fn hodge(a: Self) Self {
+            const mask: @Vector(basis_num + 1, T) = comptime blk: {
+                var temp: [basis_num + 1]T = undefined;
+                for (0..basis_num + 1) |i| {
+                    const res = memoizedMultiplyBasis(.pos, i, basis_num - i);
+                    temp[basis_num - i] = res[1];
+                }
+                break :blk temp;
+            };
+            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * mask };
         }
 
         pub fn unhodge(a: Self) Self {
-            var r: Self = undefined;
-
-            for (a.val, 0..) |scalar, i| {
-                const res = memoizedMultiplyBasis(.pos, basis_num - i, i);
-
-                r.val[basis_num - i] = res[1] * scalar;
-            }
-            return r;
+            const mask: @Vector(basis_num + 1, T) = comptime blk: {
+                var temp: [basis_num + 1]T = undefined;
+                for (0..basis_num + 1) |i| {
+                    const res = memoizedMultiplyBasis(.pos, basis_num - i, i);
+                    temp[basis_num - i] = res[1];
+                }
+                break :blk temp;
+            };
+            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * mask };
         }
 
         // ?
@@ -616,7 +656,6 @@ test "regular algebra" {
 }
 
 test "algebra" {
-    var timer = try std.time.Timer.start();
     const Alg = Algebra(i32, 2, 1, 1);
 
     try std.testing.expectEqualSlices(
@@ -778,5 +817,11 @@ test "algebra" {
         &Alg.fromInt(0).val,
         &(try Alg.eval("(e13) & (-e23)", .{})).val,
     );
-    std.debug.print("\n{}\n", .{timer.lap()});
+
+    try std.testing.expectEqual((try Alg.eval(big, .{})).get(.e023), 14);
+
+    var set_test = try Alg.eval(big, .{});
+    set_test.set(.e023, 666);
+
+    try std.testing.expectEqual(set_test.get(.e023), 666);
 }

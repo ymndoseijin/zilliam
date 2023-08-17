@@ -318,6 +318,41 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return .{ r, sign };
         }
 
+        fn memoizedMultiplyBasis(comptime quadratic_form: Sign, a_i: usize, b_i: usize) struct { usize, i32 } {
+            const res = switch (quadratic_form) {
+                .pos => .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] },
+                .neg => .{ negMatrix[0][a_i][b_i], negMatrix[1][a_i][b_i] },
+                .zero => .{ zeroMatrix[0][a_i][b_i], zeroMatrix[1][a_i][b_i] },
+            };
+            return res;
+        }
+
+        const Generation = struct {
+            [basis_num + 1][basis_num + 1]usize,
+            [basis_num + 1][basis_num + 1]i32,
+        };
+
+        fn generateMatrix(comptime quadratic_form: Sign) Generation {
+            var temp: Generation = undefined;
+            for (0..basis_num + 1) |i| {
+                for (0..basis_num + 1) |j| {
+                    @setEvalBranchQuota(1219541);
+                    const res = multiplyBasis(quadratic_form, i, j);
+                    temp[0][i][j] = res[0];
+                    temp[1][i][j] = switch (res[1]) {
+                        .pos => 1,
+                        .neg => -1,
+                        .zero => 0,
+                    };
+                }
+            }
+            return temp;
+        }
+
+        const posMatrix = generateMatrix(.pos);
+        const negMatrix = generateMatrix(.neg);
+        const zeroMatrix = generateMatrix(.zero);
+
         // TODO: simd
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
             var r: Self = undefined;
@@ -327,13 +362,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 for (b.val, 0..) |b_us, b_i| {
                     if (b_us == 0) continue;
 
-                    const res = multiplyBasis(quadratic_form, a_i, b_i);
+                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
-                    const sign: T = switch (res[1]) {
-                        .pos => 1,
-                        .neg => -1,
-                        .zero => 0,
-                    };
+                    const sign: T = res[1];
                     const a_scalar: T = @intCast(a_us);
                     const b_scalar: T = @intCast(b_us);
 
@@ -346,28 +377,34 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         // needs to be optimized
-        fn inCommon(i: usize, j: usize) bool {
-            const blade_a = indices[i];
-            const blade_b = indices[j];
+        const commonMatrix = blk: {
+            var temp: [basis_num + 1][basis_num + 1]bool = undefined;
+            for (0..basis_num + 1) |i| {
+                for (0..basis_num + 1) |j| {
+                    const blade_a = indices[i];
+                    const blade_b = indices[j];
 
-            var in_common = true;
+                    var in_common = true;
 
-            for (blade_a.tags[0..blade_a.count]) |tag_a| {
-                var tag_not = true;
-                for (blade_b.tags[0..blade_b.count]) |tag_b| {
-                    if (tag_a == tag_b) {
-                        tag_not = false;
-                        break;
+                    for (blade_a.tags[0..blade_a.count]) |tag_a| {
+                        var tag_not = true;
+                        for (blade_b.tags[0..blade_b.count]) |tag_b| {
+                            if (tag_a == tag_b) {
+                                tag_not = false;
+                                break;
+                            }
+                        }
+                        if (tag_not) {
+                            in_common = false;
+                            break;
+                        }
                     }
-                }
-                if (tag_not) {
-                    in_common = false;
-                    break;
+                    temp[i][j] = in_common;
                 }
             }
 
-            return in_common;
-        }
+            break :blk temp;
+        };
 
         // TODO: simd
         pub fn inner(a: Self, b: Self) Self {
@@ -378,14 +415,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 for (b.val, 0..) |b_us, b_i| {
                     if (b_us == 0) continue;
 
-                    if (inCommon(a_i, b_i) or inCommon(b_i, a_i)) {
-                        const res = multiplyBasis(.pos, a_i, b_i);
+                    if (commonMatrix[a_i][b_i] or commonMatrix[b_i][a_i]) {
+                        const res = .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] };
 
-                        const sign: T = switch (res[1]) {
-                            .pos => 1,
-                            .neg => -1,
-                            .zero => 0,
-                        };
+                        const sign: T = res[1];
                         const a_scalar: T = @intCast(a_us);
                         const b_scalar: T = @intCast(b_us);
 
@@ -412,46 +445,61 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return a.anticommute(.zero, b);
         }
 
-        pub fn grade_involution(a: Self) Self {
-            var res = Self{};
-            for (a.val, 0..) |blade, i| {
+        const grade_mask: @Vector(basis_num + 1, T) = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (&temp, 0..) |*val, i| {
                 const len = indices[i].count;
                 if (len % 2 == 0) {
-                    res.val[i] = blade;
+                    val.* = 1;
                 } else {
-                    res.val[i] = -blade;
+                    val.* = -1;
                 }
             }
-            return res;
+            break :blk temp;
+        };
+
+        pub fn grade_involution(a: Self) Self {
+            return Self{ .val = a.val * grade_mask };
         }
 
-        pub fn reverse(a: Self) Self {
-            var res = Self{};
-            for (a.val, 0..) |blade, i| {
+        const reverse_mask: @Vector(basis_num + 1, T) = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (&temp, 0..) |*val, i| {
                 const len = indices[i].count;
                 if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
-                    res.val[i] = blade;
+                    val.* = 1;
                 } else {
-                    res.val[i] = -blade;
+                    val.* = -1;
                 }
             }
-            return res;
+            break :blk temp;
+        };
+
+        pub fn reverse(a: Self) Self {
+            return Self{ .val = a.val * reverse_mask };
         }
 
         pub fn grade_projection(a: Self, k_in: usize) !Self {
             var res = Self{};
 
             switch (k_in) {
-                0...sum_of_dim => |k| {
-                    // TODO: simd
-                    inline for (indices, 0..) |blade, i| {
-                        if (blade.count == k) {
-                            res.val[i] = a.val[i];
-                        }
-                    }
-                },
-                else => {
+                sum_of_dim + 1...std.math.maxInt(usize) => |_| {
                     return error.InvalidK;
+                },
+                inline else => |k| {
+                    const mask: @Vector(basis_num + 1, T) = comptime blk: {
+                        var temp: [basis_num + 1]T = undefined;
+                        for (&temp, 0..) |*val, i| {
+                            const len = indices[i].count;
+                            if (len == k) {
+                                val.* = 1;
+                            } else {
+                                val.* = 0;
+                            }
+                        }
+                        break :blk temp;
+                    };
+                    res.val = a.val * mask;
                 },
             }
 
@@ -511,15 +559,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             var r: Self = undefined;
 
             for (a.val, 0..) |scalar, i| {
-                const res = multiplyBasis(.pos, i, basis_num - i);
+                const res = memoizedMultiplyBasis(.pos, i, basis_num - i);
 
-                const sign: T = switch (res[1]) {
-                    .pos => 1,
-                    .neg => -1,
-                    .zero => 0,
-                };
-
-                r.val[basis_num - i] = sign * scalar;
+                r.val[basis_num - i] = res[1] * scalar;
             }
             return r;
         }
@@ -528,15 +570,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             var r: Self = undefined;
 
             for (a.val, 0..) |scalar, i| {
-                const res = multiplyBasis(.pos, basis_num - i, i);
+                const res = memoizedMultiplyBasis(.pos, basis_num - i, i);
 
-                const sign: T = switch (res[1]) {
-                    .pos => 1,
-                    .neg => -1,
-                    .zero => 0,
-                };
-
-                r.val[basis_num - i] = sign * scalar;
+                r.val[basis_num - i] = res[1] * scalar;
             }
             return r;
         }
@@ -580,6 +616,7 @@ test "regular algebra" {
 }
 
 test "algebra" {
+    var timer = try std.time.Timer.start();
     const Alg = Algebra(i32, 2, 1, 1);
 
     try std.testing.expectEqualSlices(
@@ -741,4 +778,5 @@ test "algebra" {
         &Alg.fromInt(0).val,
         &(try Alg.eval("(e13) & (-e23)", .{})).val,
     );
+    std.debug.print("\n{}\n", .{timer.lap()});
 }

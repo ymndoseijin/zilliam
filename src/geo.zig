@@ -95,6 +95,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         break :blk temp;
     };
 
+    @setEvalBranchQuota(1219541);
+
     return struct {
         val: [basis_num + 1]T = .{0} ** (basis_num + 1),
         const Self = @This();
@@ -166,6 +168,35 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         pub fn set(a: *Self, blade: BladeEnum, val: T) void {
             a.val[@intFromEnum(blade) + 1] = val;
+        }
+
+        pub fn getBladeType(comptime k: usize) type {
+            const count = blk: {
+                var temp = 0;
+                for (indices) |data| {
+                    if (data.count == k) {
+                        temp += 1;
+                    }
+                }
+                break :blk temp;
+            };
+
+            const mask = blk: {
+                var temp: [count]i32 = undefined;
+                var index = 0;
+                for (indices, 0..) |data, i| {
+                    if (data.count == k) {
+                        temp[index] = i;
+                        index += 1;
+                    }
+                }
+                break :blk temp;
+            };
+
+            return struct {
+                pub const Mask = mask;
+                val: [count]T,
+            };
         }
 
         // a*b: geo
@@ -383,30 +414,116 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         const negMatrix = generateMatrix(.neg);
         const zeroMatrix = generateMatrix(.zero);
 
-        // TODO: simd
-        pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
-            var r: Self = undefined;
-            var vec: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
-            for (a.val, 0..) |a_us, a_i| {
-                if (a_us == 0) continue;
-                for (b.val, 0..) |b_us, b_i| {
-                    if (b_us == 0) continue;
+        const PairType = ?struct { usize, usize };
+        pub fn getAntiLen(comptime quadratic_form: Sign) usize {
+            @setEvalBranchQuota(1219541);
+            var largest: usize = 0;
 
+            const size = 2048;
+            var table: [size][basis_num + 1]bool = .{(.{false} ** (basis_num + 1))} ** size;
+
+            for (0..basis_num + 1) |a_i| {
+                for (0..basis_num + 1) |b_i| {
+                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+
+                    var not_found = true;
+
+                    for (table[0..largest]) |*val| {
+                        if (val[res[0]] == false) {
+                            val[res[0]] = true;
+                            not_found = false;
+                            break;
+                        }
+                    }
+
+                    if (not_found) {
+                        if (table[largest][res[0]] != false) largest += 1;
+
+                        table[largest][res[0]] = true;
+                    }
+                }
+            }
+            return largest;
+        }
+
+        pub fn anticommuteMemoize(comptime quadratic_form: Sign) struct {
+            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+            [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
+        } {
+            const size = 2048;
+
+            @setEvalBranchQuota(1219541);
+
+            var multiply_a: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
+            var multiply_b: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
+            var select: [size][basis_num + 1]i32 = .{.{@as(i32, 0)} ** (basis_num + 1)} ** size;
+
+            var largest: usize = 0;
+
+            for (0..basis_num + 1) |a_i| {
+                for (0..basis_num + 1) |b_i| {
                     const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
                     const sign: T = res[1];
-                    const a_scalar: T = @intCast(a_us);
-                    const b_scalar: T = @intCast(b_us);
 
-                    vec[res[0]] += a_scalar * b_scalar * sign;
+                    var not_found = true;
+
+                    for (multiply_a[0..largest], multiply_b[0..largest], select[0..largest]) |*m_a, *m_b, *sel| {
+                        if (m_a[res[0]] == -1) {
+                            m_a[res[0]] = a_i;
+                            m_b[res[0]] = b_i;
+                            sel[res[0]] = sign;
+                            not_found = false;
+                            break;
+                        }
+                    }
+
+                    if (not_found) {
+                        if (multiply_a[largest][res[0]] != -1) largest += 1;
+
+                        multiply_a[largest][res[0]] = a_i;
+                        multiply_b[largest][res[0]] = b_i;
+                        select[largest][res[0]] = sign;
+                    }
                 }
             }
-            r.val = vec;
 
-            return r;
+            const Result = struct {
+                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+                [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
+            };
+            var res: Result = undefined;
+
+            @memcpy(&res[0], multiply_a[0 .. largest + 1]);
+            @memcpy(&res[1], multiply_b[0 .. largest + 1]);
+            @memcpy(&res[2], select[0 .. largest + 1]);
+            return res;
         }
 
-        // needs to be optimized
+        const posRes = anticommuteMemoize(.pos);
+        const negRes = anticommuteMemoize(.neg);
+        const zeroRes = anticommuteMemoize(.zero);
+
+        pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
+            var c: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
+
+            const res = switch (quadratic_form) {
+                .pos => posRes,
+                .neg => negRes,
+                .zero => zeroRes,
+            };
+
+            inline for (res[0], res[1], res[2]) |sel_a, sel_b, mult| {
+                var first = @shuffle(i32, a.val, a.val, sel_a);
+                var second = @shuffle(i32, b.val, b.val, sel_b);
+                c += first * second * mult;
+            }
+
+            return Self{ .val = c };
+        }
+
         const commonMatrix = blk: {
             var temp: [basis_num + 1][basis_num + 1]bool = undefined;
             for (0..basis_num + 1) |i| {
@@ -824,4 +941,10 @@ test "algebra" {
     set_test.set(.e023, 666);
 
     try std.testing.expectEqual(set_test.get(.e023), 666);
+
+    var buf: [2048]u8 = undefined;
+    std.debug.print("\n", .{});
+    inline for (0..Alg.Indices.len - 1) |i| {
+        std.debug.print("{s}, ", .{(try @field(Alg.Blades, @tagName(@as(Alg.BladeEnum, @enumFromInt(i)))).print(&buf))[1..]});
+    }
 }

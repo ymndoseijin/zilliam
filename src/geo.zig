@@ -449,7 +449,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub fn anticommuteMemoize(comptime quadratic_form: Sign) struct {
             [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
             [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-            [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
+            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
         } {
             const size = 2048;
 
@@ -492,7 +492,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             const Result = struct {
                 [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
                 [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-                [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
+                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
             };
             var res: Result = undefined;
 
@@ -943,6 +943,7 @@ test "algebra" {
     try std.testing.expectEqual(set_test.get(.e023), 666);
 
     var buf: [2048]u8 = undefined;
+    std.debug.print("\n", .{});
     std.debug.print("\n", .{});
     inline for (0..Alg.Indices.len - 1) |i| {
         std.debug.print("{s}, ", .{(try @field(Alg.Blades, @tagName(@as(Alg.BladeEnum, @enumFromInt(i)))).print(&buf))[1..]});

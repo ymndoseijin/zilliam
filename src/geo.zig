@@ -793,13 +793,10 @@ test "algebra" {
         &(try Alg.eval("-3*e2+2", .{})).val,
     );
 
-    // 6*e1-3*e2+4*e12+2 = 6*e1-3*e2-4*e12-2???
-    // temp: "6*e1-(3*e2)+4*e12+2 seems to fix it (it's a comath bug)
-
     try std.testing.expectEqualSlices(
         i32,
         &(try Alg.eval("(2*e1+3*e12)*(e1+2*e2)", .{})).val,
-        &(try Alg.eval("6*e1-(3*e2)+4*e12+2", .{})).val,
+        &(try Alg.eval("6*e1-3*e2+4*e12+2", .{})).val,
     );
 
     try std.testing.expectEqualSlices(

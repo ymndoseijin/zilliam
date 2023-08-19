@@ -1,59 +1,87 @@
 const std = @import("std");
 
 const Algebra = @import("geo.zig").Algebra;
+const Alg = Algebra(i32, 2, 1, 1);
+
+const packed_vec = extern struct { val: [16]c_int };
+export fn wedge_abi(a: packed_vec, b: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).wedge(Alg{ .val = b.val }).val };
+}
+
+export fn mul_abi(a: packed_vec, b: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).mul(Alg{ .val = b.val }).val };
+}
+
+export fn hodge_abi(a: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).hodge().val };
+}
+
+export fn reverse_abi(a: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).reverse().val };
+}
+
+export fn abs2_abi(a: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).abs2().val };
+}
+
+export fn grade_projection_abi(a: packed_vec, k: c_uint) packed_vec {
+    return .{ .val = ((Alg{ .val = a.val }).grade_projection(k) catch unreachable).val };
+}
+
+export fn dual_abi(a: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).dual().val };
+}
+
+export fn undual_abi(a: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).undual().val };
+}
+
+export fn inner_abi(a: packed_vec, b: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).inner(Alg{ .val = b.val }).val };
+}
+
+export fn regressive_abi(a: packed_vec, b: packed_vec) packed_vec {
+    return .{ .val = (Alg{ .val = a.val }).regressive(Alg{ .val = b.val }).val };
+}
 
 pub fn main() !void {
-    const Alg = Algebra(i32, 2, 1, 1);
+    var checksum: @Vector(16, i32) = .{0} ** 16;
+    for (0..50000) |i_in| {
+        var acc: @Vector(16, i32) = .{0} ** 16;
+        const i: i32 = @intCast(i_in % 200);
+        acc +%= wedge_abi(
+            .{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } },
+            .{ .val = .{ i + 73, i + 79, i + 83, i + 89, i + 97, i + 101, i + 103, i + 107, i + 109, i + 113, i + 127, i + 131, i + 137, i + 139, i + 149, i + 151 } },
+        ).val;
 
-    var acc = Alg{ .val = .{0} ** 16 };
-    for (0..200000) |_| {
-        acc = acc.add((Alg{
-            .val = .{ 7, 0, 2, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0 },
-        }).wedge(.{
-            .val = .{ 19, 0, 11, 13, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0 },
-        }));
+        acc +%= mul_abi(
+            .{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } },
+            .{ .val = .{ i + 73, i + 79, i + 83, i + 89, i + 97, i + 101, i + 103, i + 107, i + 109, i + 113, i + 127, i + 131, i + 137, i + 139, i + 149, i + 151 } },
+        ).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 7, 23, 2, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0 },
-        }).mul(.{
-            .val = .{ 19, 31, 11, 13, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0 },
-        }));
+        acc +%= hodge_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 7, 11, 2, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0 },
-        }).hodge());
+        acc +%= reverse_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 1, 2, 3, 4, 5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15, 16 },
-        }).reverse());
+        acc +%= abs2_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }).val;
 
-        const val = Alg{ .val = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 } };
-        acc = acc.add((try val.grade_projection(2)));
+        acc +%= grade_projection_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }, @intCast(i_in % 5)).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        }).abs2());
+        acc +%= dual_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        }).dual());
+        acc +%= undual_abi(.{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } }).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        }).undual());
+        acc +%= inner_abi(
+            .{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } },
+            .{ .val = .{ i + 73, i + 79, i + 83, i + 89, i + 97, i + 101, i + 103, i + 107, i + 109, i + 113, i + 127, i + 131, i + 137, i + 139, i + 149, i + 151 } },
+        ).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 7, 23, 2, 3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0 },
-        }).inner(.{
-            .val = .{ 19, 31, 11, 13, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0 },
-        }));
+        acc +%= regressive_abi(
+            .{ .val = .{ i + 2, i + 3, i + 5, i + 7, i + 11, i + 13, i + 17, i + 19, i + 23, i + 29, i + 31, i + 37, i + 41, i + 43, i + 47, i + 53 } },
+            .{ .val = .{ i + 73, i + 79, i + 83, i + 89, i + 97, i + 101, i + 103, i + 107, i + 109, i + 113, i + 127, i + 131, i + 137, i + 139, i + 149, i + 151 } },
+        ).val;
 
-        acc = acc.add((Alg{
-            .val = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 },
-        }).regressive(.{
-            .val = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0 },
-        }));
+        checksum +%= acc;
     }
-
-    std.debug.print("{any}\n", .{acc.val});
+    std.debug.print("{any}\n", .{checksum});
 }

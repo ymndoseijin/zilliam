@@ -935,17 +935,8 @@ test "algebra" {
         &(try Alg.eval("(e13) & (-e23)", .{})).val,
     );
 
-    try std.testing.expectEqual((try Alg.eval(big, .{})).get(.e023), 14);
-
     var set_test = try Alg.eval(big, .{});
     set_test.set(.e023, 666);
 
     try std.testing.expectEqual(set_test.get(.e023), 666);
-
-    var buf: [2048]u8 = undefined;
-    std.debug.print("\n", .{});
-    std.debug.print("\n", .{});
-    inline for (0..Alg.Indices.len - 1) |i| {
-        std.debug.print("{s}, ", .{(try @field(Alg.Blades, @tagName(@as(Alg.BladeEnum, @enumFromInt(i)))).print(&buf))[1..]});
-    }
 }

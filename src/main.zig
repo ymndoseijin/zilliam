@@ -3,7 +3,7 @@ const std = @import("std");
 const Algebra = @import("geo.zig").Algebra;
 const Alg = Algebra(i32, 2, 1, 1);
 
-const packed_vec = extern struct { val: [16]c_int };
+const packed_vec = extern struct { val: [Alg.BasisNum + 1]c_int };
 export fn wedge_abi(a: packed_vec, b: packed_vec) packed_vec {
     return .{ .val = (Alg{ .val = a.val }).wedge(Alg{ .val = b.val }).val };
 }

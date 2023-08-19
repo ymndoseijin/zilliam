@@ -101,6 +101,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         val: [basis_num + 1]T = .{0} ** (basis_num + 1),
         const Self = @This();
         pub const Indices = indices;
+        pub const BasisNum = basis_num;
 
         const blade_types = blk: {
             var struct_fields: [basis_num]std.builtin.Type.StructField = undefined;
@@ -170,16 +171,18 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             a.val[@intFromEnum(blade) + 1] = val;
         }
 
-        pub fn getBladeType(comptime k: usize) type {
-            const count = blk: {
-                var temp = 0;
-                for (indices) |data| {
-                    if (data.count == k) {
-                        temp += 1;
-                    }
+        pub fn getBladeCount(comptime k: usize) usize {
+            var total: usize = 0;
+            for (indices) |data| {
+                if (data.count == k) {
+                    total += 1;
                 }
-                break :blk temp;
-            };
+            }
+            return total;
+        }
+
+        pub fn getBladeType(comptime k: usize) type {
+            const count = comptime getBladeCount(k);
 
             const mask = blk: {
                 var temp: [count]i32 = undefined;
@@ -449,7 +452,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub fn anticommuteMemoize(comptime quadratic_form: Sign) struct {
             [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
             [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+            [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
         } {
             const size = 2048;
 
@@ -457,7 +460,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
             var multiply_a: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
             var multiply_b: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
-            var select: [size][basis_num + 1]i32 = .{.{@as(i32, 0)} ** (basis_num + 1)} ** size;
+            var select: [size][basis_num + 1]T = .{.{@as(T, 0)} ** (basis_num + 1)} ** size;
 
             var largest: usize = 0;
 
@@ -492,7 +495,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             const Result = struct {
                 [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
                 [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
+                [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
             };
             var res: Result = undefined;
 
@@ -516,8 +519,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             };
 
             inline for (res[0], res[1], res[2]) |sel_a, sel_b, mult| {
-                var first = @shuffle(i32, a.val, a.val, sel_a);
-                var second = @shuffle(i32, b.val, b.val, sel_b);
+                var first = @shuffle(T, a.val, a.val, sel_a);
+                var second = @shuffle(T, b.val, b.val, sel_b);
                 c += first * second * mult;
             }
 
@@ -672,7 +675,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     _ = try writer.print("{}", .{val});
                 } else {
                     const basis = indices[index];
-                    _ = try writer.print("{}e", .{val});
+                    if (val != 1) {
+                        _ = try writer.print("{d:.4}e", .{val});
+                    } else {
+                        _ = try writer.print("e", .{});
+                    }
                     for (basis.tags[0..basis.count]) |basis_idx| {
                         var actual: i32 = @intCast(basis_idx);
                         actual -= @intCast(null_dim);

@@ -32,16 +32,19 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/geo.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    unit_tests.addModule("comath", comath_dep.module("comath"));
-
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+
+    inline for (.{ "src/geo.zig", "src/pga2d.zig" }) |name| {
+        const unit_tests = b.addTest(.{
+            .root_source_file = .{ .path = name },
+            .target = target,
+            .optimize = optimize,
+        });
+
+        unit_tests.addModule("comath", comath_dep.module("comath"));
+
+        const run_unit_tests = b.addRunArtifact(unit_tests);
+
+        test_step.dependOn(&run_unit_tests.step);
+    }
 }

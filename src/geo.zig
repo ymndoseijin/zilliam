@@ -181,24 +181,145 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return total;
         }
 
-        pub fn getBladeType(comptime k: usize) type {
-            const count = comptime getBladeCount(k);
+        pub fn getBladeType() type {
+            const types = type_blk: {
+                var res: [sum_of_dim + 1]type = undefined;
+                inline for (0..sum_of_dim) |k| {
+                    const it = blk: {
+                        const count = comptime getBladeCount(k);
 
-            const mask = blk: {
-                var temp: [count]i32 = undefined;
-                var index = 0;
-                for (indices, 0..) |data, i| {
-                    if (data.count == k) {
-                        temp[index] = i;
-                        index += 1;
-                    }
+                        const mask = mask_blk: {
+                            var temp: [count]i32 = undefined;
+
+                            var index: usize = 0;
+                            for (indices, 0..) |data, i| {
+                                if (data.count == k) {
+                                    temp[index] = i;
+                                    index += 1;
+                                }
+                            }
+                            break :mask_blk temp;
+                        };
+
+                        const mask_to = mask_blk: {
+                            var temp: [basis_num + 1]i32 = .{-1} ** (basis_num + 1);
+
+                            var index: usize = 0;
+                            for (indices, 0..) |data, i| {
+                                if (data.count == k) {
+                                    temp[i] = index;
+                                    index += 1;
+                                }
+                            }
+                            break :mask_blk temp;
+                        };
+
+                        break :blk struct {
+                            pub const Mask = mask;
+                            pub const MaskTo = mask_to;
+                            pub const Count = count;
+                            pub const K = k;
+                            val: [count]T = .{0} ** count,
+                        };
+                    };
+                    res[k] = it;
                 }
-                break :blk temp;
+
+                const count = blk: {
+                    var temp: usize = 0;
+                    for (indices) |data| {
+                        if (data.count % 2 == 0) temp += 1;
+                    }
+                    break :blk temp;
+                };
+
+                const mask = mask_blk: {
+                    var temp: [count]i32 = undefined;
+
+                    var index: usize = 0;
+                    for (indices, 0..) |data, i| {
+                        if (data.count % 2 == 0) {
+                            temp[index] = i;
+                            index += 1;
+                        }
+                    }
+                    break :mask_blk temp;
+                };
+
+                const mask_to = mask_blk: {
+                    var temp: [basis_num + 1]i32 = .{-1} ** (basis_num + 1);
+
+                    var index: usize = 0;
+                    for (indices, 0..) |data, i| {
+                        if (data.count % 2 == 0) {
+                            temp[i] = index;
+                            index += 1;
+                        }
+                    }
+                    break :mask_blk temp;
+                };
+
+                res[sum_of_dim] = struct {
+                    pub const Mask = mask;
+                    pub const MaskTo = mask_to;
+                    pub const Count = count;
+                    pub const K = basis_num;
+                    val: [count]T = .{0} ** count,
+                };
+
+                break :type_blk res;
             };
 
             return struct {
-                pub const Mask = mask;
-                val: [count]T,
+                pub const Types = types;
+
+                pub fn mulResult(comptime a: type, comptime b: type) type {
+                    @setEvalBranchQuota(1219541);
+
+                    const res = posRes;
+                    var first = true;
+                    var candidate: usize = 0;
+                    const a_k = a.K;
+                    const b_k = b.K;
+                    for (res[0], res[1]) |sel_a, sel_b| {
+                        for (sel_a, sel_b, 0..) |val_a, val_b, i| {
+                            if (val_a == -1 or val_b == -1) continue;
+                            const k_1 = indices[val_a].count;
+                            const k_2 = indices[val_b].count;
+                            if ((k_1 == a_k and k_2 == b_k) or
+                                (k_1 == b_k and k_2 == a_k))
+                            {
+                                if (first) {
+                                    candidate = indices[i].count;
+                                    first = false;
+                                } else if (indices[i].count != candidate) {
+                                    if ((candidate % 2 == 0 and indices[i].count % 2 == 0) or
+                                        (candidate == Types.len - 1))
+                                    {
+                                        candidate = Types.len - 1;
+                                        continue;
+                                    }
+                                    return Self;
+                                }
+                            }
+                        }
+                    }
+
+                    return Types[candidate];
+                }
+
+                pub fn mul(a: anytype, b: anytype) mulResult(@TypeOf(a), @TypeOf(b)) {
+                    const Result = mulResult(@TypeOf(a), @TypeOf(b));
+                    const count = if (Result == Self) Result.Indices.len else Result.Count;
+                    var zeroes: @Vector(count, T) = .{0} ** count;
+
+                    const a_alg = Self{ .val = @shuffle(T, a.val, zeroes, @TypeOf(a).MaskTo) };
+                    const b_alg = Self{ .val = @shuffle(T, b.val, zeroes, @TypeOf(b).MaskTo) };
+
+                    const res = a_alg.mul(b_alg);
+
+                    return Result{ .val = @shuffle(T, res.val, res.val, Result.Mask) };
+                }
             };
         }
 
@@ -675,11 +796,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     _ = try writer.print("{}", .{val});
                 } else {
                     const basis = indices[index];
-                    if (val != 1) {
-                        _ = try writer.print("{d:.4}e", .{val});
-                    } else {
-                        _ = try writer.print("e", .{});
-                    }
+                    _ = try writer.print("{d:.4}e", .{val});
                     for (basis.tags[0..basis.count]) |basis_idx| {
                         var actual: i32 = @intCast(basis_idx);
                         actual -= @intCast(null_dim);
@@ -687,6 +804,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     }
                 }
             }
+            _ = try writer.writeByte(0);
 
             return name.items;
         }

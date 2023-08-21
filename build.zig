@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "symzig",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/benchmark.zig" },
         .target = target,
         .optimize = optimize,
     });

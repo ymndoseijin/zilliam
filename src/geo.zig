@@ -276,7 +276,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 pub fn mulResult(comptime a: type, comptime b: type) type {
                     @setEvalBranchQuota(1219541);
 
-                    const res = posRes;
+                    const res = posOp.Res;
                     var first = true;
                     var candidate: usize = 0;
                     const a_k = a.K;
@@ -570,11 +570,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return largest;
         }
 
-        pub fn anticommuteMemoize(comptime quadratic_form: Sign) struct {
-            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-            [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-            [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
-        } {
+        pub fn firstStage(comptime quadratic_form: Sign) type {
             const size = 2048;
 
             @setEvalBranchQuota(1219541);
@@ -613,36 +609,155 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 }
             }
 
+            const result_len = largest + 1;
             const Result = struct {
-                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-                [getAntiLen(quadratic_form) + 1][basis_num + 1]i32,
-                [getAntiLen(quadratic_form) + 1][basis_num + 1]T,
+                [result_len][basis_num + 1]i32,
+                [result_len][basis_num + 1]i32,
+                [result_len][basis_num + 1]T,
             };
-            var res: Result = undefined;
+            var res_mut: Result = undefined;
 
-            @memcpy(&res[0], multiply_a[0 .. largest + 1]);
-            @memcpy(&res[1], multiply_b[0 .. largest + 1]);
-            @memcpy(&res[2], select[0 .. largest + 1]);
-            return res;
+            @memcpy(&res_mut[0], multiply_a[0 .. largest + 1]);
+            @memcpy(&res_mut[1], multiply_b[0 .. largest + 1]);
+            @memcpy(&res_mut[2], select[0 .. largest + 1]);
+
+            const res = res_mut;
+
+            return struct {
+                pub const Res = res;
+            };
         }
 
-        const posRes = anticommuteMemoize(.pos);
-        const negRes = anticommuteMemoize(.neg);
-        const zeroRes = anticommuteMemoize(.zero);
+        pub fn anticommuteMemoize(comptime quadratic_form: Sign) type {
+            const size = 2048;
+
+            const first_stage = firstStage(quadratic_form).Res;
+
+            const IntSlice = struct { [size]i32, usize };
+            const TSlice = struct { [size]T, usize };
+
+            var removed: [first_stage[0].len]bool = .{false} ** first_stage[0].len;
+            var vertical_a: [basis_num + 1]IntSlice = .{.{ .{-1} ** size, 0 }} ** (basis_num + 1);
+            var vertical_b: [basis_num + 1]IntSlice = .{.{ .{-1} ** size, 0 }} ** (basis_num + 1);
+            var vertical_sel: [basis_num + 1]TSlice = .{.{ .{0} ** size, 0 }} ** (basis_num + 1);
+
+            var count: usize = 0;
+
+            // first pass over, now removing too vertical stuff
+            for (&first_stage[0], &first_stage[1], &first_stage[2], 0..) |*m_a, *m_b, *sel, i| {
+                var null_count: usize = 0;
+                for (m_a) |val| {
+                    if (val == -1) null_count += 1;
+                }
+                if (null_count > (basis_num * 0.5)) {
+                    removed[i] = true;
+                    count += 1;
+                    for (m_a, m_b, sel, 0..) |a_i, b_i, sel_i, j| {
+                        if (a_i == -1) continue;
+
+                        var a = &vertical_a[j];
+                        var b = &vertical_b[j];
+                        var c = &vertical_sel[j];
+
+                        a[0][a[1]] = a_i;
+                        a[1] += 1;
+
+                        b[0][b[1]] = b_i;
+                        b[1] += 1;
+
+                        c[0][c[1]] = sel_i;
+                        c[1] += 1;
+                    }
+                }
+            }
+
+            var multiply_a: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
+            var multiply_b: [size][basis_num + 1]i32 = .{(.{-1} ** (basis_num + 1))} ** size;
+            var select: [size][basis_num + 1]T = .{.{@as(T, 0)} ** (basis_num + 1)} ** size;
+
+            var largest: usize = 0;
+
+            for (&first_stage[0], &first_stage[1], &first_stage[2], removed) |*m_a, *m_b, *sel, will_remove| {
+                if (!will_remove) {
+                    multiply_a[largest] = m_a.*;
+                    multiply_b[largest] = m_b.*;
+                    select[largest] = sel.*;
+                    largest += 1;
+                }
+            }
+
+            const Reduced = blk: {
+                var temp: [basis_num + 1]type = undefined;
+                inline for (vertical_a, vertical_b, vertical_sel, 0..) |a, b, c, i| {
+                    const Type = struct {
+                        [a[1]]i32,
+                        [b[1]]i32,
+                        [c[1]]T,
+                    };
+                    var res_temp: Type = undefined;
+                    @memcpy(&res_temp[0], a[0][0..a[1]]);
+                    @memcpy(&res_temp[1], b[0][0..b[1]]);
+                    @memcpy(&res_temp[2], c[0][0..c[1]]);
+
+                    const res = res_temp;
+
+                    temp[i] = struct {
+                        pub const Res = res;
+                    };
+                }
+                break :blk temp;
+            };
+
+            const result_len = largest;
+            const Result = struct {
+                [result_len][basis_num + 1]i32,
+                [result_len][basis_num + 1]i32,
+                [result_len][basis_num + 1]T,
+            };
+            var res_mut: Result = undefined;
+
+            @memcpy(&res_mut[0], multiply_a[0..largest]);
+            @memcpy(&res_mut[1], multiply_b[0..largest]);
+            @memcpy(&res_mut[2], select[0..largest]);
+
+            const res = res_mut;
+
+            return struct {
+                pub const Res = res;
+                pub const ReducedOps = Reduced;
+            };
+        }
+
+        pub const posOp = anticommuteMemoize(.pos);
+        pub const negOp = anticommuteMemoize(.neg);
+        pub const zeroOp = anticommuteMemoize(.zero);
 
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
             var c: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
 
-            const res = switch (quadratic_form) {
-                .pos => posRes,
-                .neg => negRes,
-                .zero => zeroRes,
+            const op = switch (quadratic_form) {
+                .pos => posOp,
+                .neg => negOp,
+                .zero => zeroOp,
             };
 
-            inline for (res[0], res[1], res[2]) |sel_a, sel_b, mult| {
+            inline for (op.Res[0], op.Res[1], op.Res[2]) |sel_a, sel_b, mult| {
                 var first = @shuffle(T, a.val, a.val, sel_a);
                 var second = @shuffle(T, b.val, b.val, sel_b);
                 c += first * second * mult;
+            }
+
+            const Reduced = op.ReducedOps;
+            inline for (Reduced, 0..) |column_container, i| {
+                const column = column_container.Res;
+                const sel_a = column[0];
+                const sel_b = column[1];
+                const mult = column[2];
+                if (sel_a.len > 0) {
+                    var first = @shuffle(T, a.val, a.val, sel_a);
+                    var second = @shuffle(T, b.val, b.val, sel_b);
+                    c[i] += @reduce(.Add, first * second * mult);
+                }
             }
 
             return Self{ .val = c };

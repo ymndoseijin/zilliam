@@ -183,8 +183,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         pub fn getBladeType() type {
             const types = type_blk: {
-                var res: [sum_of_dim + 1]type = undefined;
-                inline for (0..sum_of_dim) |k| {
+                var res: [sum_of_dim + 2]type = undefined;
+                inline for (0..sum_of_dim + 1) |k| {
                     const it = blk: {
                         const count = comptime getBladeCount(k);
 
@@ -220,6 +220,12 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                             pub const Count = count;
                             pub const K = k;
                             val: [count]T = .{0} ** count,
+
+                            pub fn print(a: @This(), buf: []u8) ![]const u8 {
+                                const zeroes: @Vector(count, T) = .{0} ** count;
+                                var val = Self{ .val = @shuffle(T, a.val, zeroes, mask_to) };
+                                return val.print(buf);
+                            }
                         };
                     };
                     res[k] = it;
@@ -259,12 +265,18 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     break :mask_blk temp;
                 };
 
-                res[sum_of_dim] = struct {
+                res[sum_of_dim + 1] = struct {
                     pub const Mask = mask;
                     pub const MaskTo = mask_to;
                     pub const Count = count;
                     pub const K = basis_num;
                     val: [count]T = .{0} ** count,
+
+                    pub fn print(a: @This(), buf: []u8) ![]const u8 {
+                        const zeroes: @Vector(count, T) = .{0} ** count;
+                        var val = Self{ .val = @shuffle(T, a.val, zeroes, mask_to) };
+                        return val.print(buf);
+                    }
                 };
 
                 break :type_blk res;
@@ -273,10 +285,16 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return struct {
                 pub const Types = types;
 
-                pub fn mulResult(comptime a: type, comptime b: type) type {
+                pub fn anticommuteResult(comptime quadratic_form: Sign, comptime a: type, comptime b: type) type {
                     @setEvalBranchQuota(1219541);
 
-                    const res = posOp.Res;
+                    const op = switch (quadratic_form) {
+                        .pos => posOp,
+                        .neg => negOp,
+                        .zero => zeroOp,
+                    };
+
+                    const res = op.Res;
                     var first = true;
                     var candidate: usize = 0;
                     const a_k = a.K;
@@ -308,17 +326,106 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     return Types[candidate];
                 }
 
-                pub fn mul(a: anytype, b: anytype) mulResult(@TypeOf(a), @TypeOf(b)) {
-                    const Result = mulResult(@TypeOf(a), @TypeOf(b));
-                    const count = if (Result == Self) Result.Indices.len else Result.Count;
-                    var zeroes: @Vector(count, T) = .{0} ** count;
+                pub fn mul(a: anytype, b: anytype) anticommuteResult(.pos, @TypeOf(a), @TypeOf(b)) {
+                    return anticommute_blade(.pos, a, b);
+                }
 
-                    const a_alg = Self{ .val = @shuffle(T, a.val, zeroes, @TypeOf(a).MaskTo) };
-                    const b_alg = Self{ .val = @shuffle(T, b.val, zeroes, @TypeOf(b).MaskTo) };
+                pub fn wedge(a: anytype, b: anytype) anticommuteResult(.pos, @TypeOf(a), @TypeOf(b)) {
+                    return anticommute_blade(.zero, a, b);
+                }
 
-                    const res = a_alg.mul(b_alg);
+                pub fn anticommute_blade(comptime quadratic_form: Sign, a: anytype, b: anytype) anticommuteResult(quadratic_form, @TypeOf(a), @TypeOf(b)) {
+                    const a_t = @TypeOf(a);
+                    const b_t = @TypeOf(b);
+                    const Result = anticommuteResult(quadratic_form, a_t, b_t);
 
-                    return Result{ .val = @shuffle(T, res.val, res.val, Result.Mask) };
+                    var c: @Vector(Result.Count, T) = .{0} ** (Result.Count);
+
+                    const op = posOp;
+
+                    const ops = comptime ops_blk: {
+                        var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
+                        var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
+                        var op_m: [op.Res[0].len][Result.Count]T = undefined;
+                        var op_invalid: [op.Res[0].len]bool = undefined;
+
+                        inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
+                            const res = blk: {
+                                const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
+
+                                @setEvalBranchQuota(2108350);
+                                var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;
+                                for (sel_a, 0..) |to, from| {
+                                    const mask_loc = Result.MaskTo[from];
+                                    if (mask_loc == -1 or to == -1) continue;
+                                    mask_a_mut[@intCast(mask_loc)] = a_t.MaskTo[to];
+                                }
+
+                                var mask_b_mut: [Result.Count]i32 = .{-1} ** Result.Count;
+                                for (sel_b, 0..) |to, from| {
+                                    const mask_loc = Result.MaskTo[from];
+                                    if (mask_loc == -1 or to == -1) continue;
+                                    mask_b_mut[@intCast(mask_loc)] = b_t.MaskTo[to];
+                                }
+
+                                var mul_mut: [Result.Count]T = @shuffle(T, mult, mult, Result.Mask);
+                                for (&mul_mut, 0..) |*val, i| {
+                                    if (mask_a_mut[i] == -1 or mask_b_mut[i] == -1) val.* = 0;
+                                }
+
+                                break :blk .{ @reduce(.And, mask_a_mut == nothings) or @reduce(.And, mask_b_mut == nothings), mask_a_mut, mask_b_mut, mul_mut };
+                            };
+
+                            op_a[op_i] = res[1];
+                            op_b[op_i] = res[2];
+                            op_m[op_i] = res[3];
+                            op_invalid[op_i] = res[0];
+                        }
+
+                        for (op_a, op_b, op_m, 0..) |a_row, b_row, s_row, row_i| {
+                            for (a_row, b_row, s_row, 0..) |a_elem, b_elem, s_elem, elem_i| {
+                                if (s_elem != 0 and !op_invalid[row_i]) {
+                                    for (0..row_i) |rep_i| {
+                                        const s_rep = op_m[rep_i][elem_i];
+                                        if (op_invalid[rep_i]) continue;
+
+                                        if (s_rep == 0) {
+                                            op_m[rep_i][elem_i] = s_elem;
+                                            op_a[rep_i][elem_i] = a_elem;
+                                            op_b[rep_i][elem_i] = b_elem;
+                                            op_m[row_i][elem_i] = 0;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        break :ops_blk .{ op_a, op_b, op_m, op_invalid };
+                    };
+
+                    const op_a = ops[0];
+                    const op_b = ops[1];
+                    const op_m = ops[2];
+                    const op_invalid = ops[3];
+
+                    inline for (op_a, op_b, op_m, op_invalid) |mask_a, mask_b, mask_m, invalid| {
+                        //const neverweres: @Vector(Result.Count, T) = .{0} ** Result.Count;
+                        const mask_m_count = comptime blk: {
+                            var count: usize = 0;
+                            for (mask_m) |v| {
+                                if (v == 0) count += 1;
+                            }
+                            break :blk count;
+                        };
+                        if (invalid == false and (mask_m_count != Result.Count)) {
+                            var first = @shuffle(T, a.val, a.val, mask_a);
+                            var second = @shuffle(T, b.val, b.val, mask_b);
+                            c += first * second * mask_m;
+                        }
+                    }
+
+                    return Result{ .val = c };
                 }
             };
         }
@@ -514,7 +621,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         const Generation = struct {
             [basis_num + 1][basis_num + 1]usize,
-            [basis_num + 1][basis_num + 1]i32,
+            [basis_num + 1][basis_num + 1]T,
         };
 
         fn generateMatrix(comptime quadratic_form: Sign) Generation {
@@ -700,8 +807,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                         const res = .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] };
 
                         const sign: T = res[1];
-                        const a_scalar: T = @intCast(a_us);
-                        const b_scalar: T = @intCast(b_us);
+                        const a_scalar: T = a_us;
+                        const b_scalar: T = b_us;
 
                         vec[res[0]] += a_scalar * b_scalar * sign;
                     } else {

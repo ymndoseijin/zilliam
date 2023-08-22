@@ -2,7 +2,7 @@
 
 This is a work in progress, but currently generates any arbitrary geometric algebra of any positive, negative and null dimension in compile time.
 
-It currently has the following operations:
+It currently has the following operations (syntax for the eval function):
 - a*b: geo
 - ~a: reverse
 - a^b: wedge
@@ -13,20 +13,65 @@ It currently has the following operations:
 - a$k: grade projection
 - %a: undual
 
-In the future,  I will try to find a way to generate SIMD code for the operations instead of doing it manually (like in [klein](https://github.com/jeremyong/klein)).
+It generates SIMD operations for any generic Clifford algebra for all these operations, and any generic type as well:
 
 ```zig
 const Alg = Algebra(i32, 2, 1, 1);
 
 try std.testing.expectEqualSlices(
     i32,
-    &(try Alg.evalBasis("(14*e1) - (21*e2) - (7*e12) - 24")).val,
-    &(try Alg.evalBasis("(2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)")).val,
+    &(try Alg.eval("(14*e1) - (21*e2) - (7*e12) - 24", .{})).val,
+    &(try Alg.eval("(2*e1+3*e2+5*e12) * (11*e1+13*e2+17*e12)", .{})).val,
 );
 
 try std.testing.expectEqualSlices(
     i32,
-    &(try Alg.evalBasis("109 + 654*e0 + 129*e1 + 127*e2 + 214*e12")).val,
-    &(try Alg.evalBasis("(23*e0+2*e1+3*e2+5*e12+7) | (31*e0+11*e1+13*e2+17*e12+19)")).val,
+    &(try Alg.eval("109 + 654*e0 + 129*e1 + 127*e2 + 214*e12", .{})).val,
+    &(try Alg.eval("(23*e0+2*e1+3*e2+5*e12+7) | (31*e0+11*e1+13*e2+17*e12+19)", .{})).val,
 );
 ```
+
+As you can see, it also uses the amazing [comath](https://github.com/InKryption/comath) library to overload operations.
+
+In the case where you know the grade of the multivectors you are working with (which is most practical cases), zilliam generates types for like k-vector plus the even subalgebra and dispatches among them.
+```zig
+const std = @import("std");
+
+const Algebra = @import("geo.zig").Algebra;
+
+const Alg = Algebra(f32, 3, 0, 1);
+const Blades = Alg.getBladeType();
+const Types = Blades.Types;
+
+const Bivector = Types[2];
+const Trivector = Types[3];
+const Rotor = Types[Types.len - 1];
+
+pub fn main() !void {
+    for (0..Bivector.Count) |a_i| {
+        for (0..Bivector.Count) |b_i| {
+            var a = Bivector{};
+            var b = Bivector{};
+            a.val[a_i] = 1;
+            b.val[b_i] = 1;
+            const r = Blades.mul(a, b);
+            var buf: [2048]u8 = undefined;
+            var r_s = try a.print(&buf);
+            std.debug.print("\n{s} * ", .{r_s});
+            r_s = try b.print(&buf);
+            std.debug.print("{s} = ", .{r_s});
+            r_s = try r.print(&buf);
+            std.debug.print("{s}\n", .{r_s});
+        }
+    }
+}
+```
+
+# Todo
+- Improve SIMD generation, right now it always multiplies the shuffled vectors with their sign and then adds, ideally it would swap out the order of operations and then choose to add, subtract or in the fallback case multiply.
+- Improve utils to generate a type for dealing wtih each flavor of geometric algebra (so PGA would have functions to generate lines, planes, etc).
+- Eventually, hook it up to my graphics library to start doing visualizations (maybe something on par with ganja.js)
+
+# References
+- Thanks to [klein](https://github.com/jeremyong/klein) specially, who gave me the idea to generate SIMD operations and something to compare the generated code to.
+- Also thanks to the people at [biVector.net](https://bivector.net/index.html) and specially their [/tools](https://bivector.net/tools.html) page, whose tables and calculators helped me verifying the correctness of my own code.

@@ -10,27 +10,29 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const exe = b.addExecutable(.{
-        .name = "symzig",
-        .root_source_file = .{ .path = "src/benchmark.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
+    inline for (.{ .{ "src/main.zig", "zilliam" }, .{ "src/benchmark.zig", "benchmark" } }) |val| {
+        const exe = b.addExecutable(.{
+            .name = val[1],
+            .root_source_file = .{ .path = val[0] },
+            .target = target,
+            .optimize = optimize,
+        });
 
-    exe.addModule("comath", comath_dep.module("comath"));
+        exe.addModule("comath", comath_dep.module("comath"));
 
-    b.installArtifact(exe);
+        b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
+        const run_cmd = b.addRunArtifact(exe);
 
-    run_cmd.step.dependOn(b.getInstallStep());
+        run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+
+        const run_step = b.step("run-" ++ val[1], "Run " ++ val[1]);
+        run_step.dependOn(&run_cmd.step);
     }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
 
     const test_step = b.step("test", "Run unit tests");
 

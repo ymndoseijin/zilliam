@@ -3,38 +3,6 @@ const comath = @import("comath");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
-fn SpreadResult(comptime Base: type, comptime Additional: type) type {
-    var fields = @typeInfo(Base).Struct.fields;
-
-    const additional_fields = @typeInfo(Additional).Struct.fields;
-    @setEvalBranchQuota(additional_fields.len * fields.len * 10);
-    for (additional_fields) |field| {
-        if (@hasField(Base, field.name)) continue;
-        fields = fields ++ &[_]std.builtin.Type.StructField{field};
-    }
-
-    return @Type(.{ .Struct = .{
-        .is_tuple = false,
-        .layout = .Auto,
-        .backing_integer = null,
-        .decls = &.{},
-        .fields = fields,
-    } });
-}
-
-fn spread(
-    base: anytype,
-    additional: anytype,
-) SpreadResult(@TypeOf(base), @TypeOf(additional)) {
-    const Base = @TypeOf(base);
-    const Additional = @TypeOf(additional);
-    var result: SpreadResult(Base, Additional) = undefined;
-    inline for (@typeInfo(Additional).Struct.fields) |field| {
-        @field(result, field.name) = @field(additional, field.name);
-    }
-    return result;
-}
-
 fn basisRecursion(comptime dim: usize, start: usize, num: usize, length: usize, decls: anytype, index: *usize, tags: [dim]usize) void {
     if (num >= length - 1) {
         decls[index.*].count = length;
@@ -341,7 +309,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
                     var c: @Vector(Result.Count, T) = .{0} ** (Result.Count);
 
-                    const op = posOp;
+                    const op = switch (quadratic_form) {
+                        .pos => posOp,
+                        .neg => negOp,
+                        .zero => zeroOp,
+                    };
 
                     const ops = comptime ops_blk: {
                         var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
@@ -473,6 +445,18 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 };
             }
 
+            pub fn EvalIdent(comptime ident: []const u8) type {
+                if (comptime std.meta.stringToEnum(BladeEnum, ident)) |_| {
+                    return Self;
+                } else {
+                    return noreturn;
+                }
+            }
+            pub fn evalIdent(ctx: @This(), comptime ident: []const u8) !EvalIdent(ident) {
+                _ = ctx;
+                return @field(Blades, ident);
+            }
+
             pub fn EvalBinOp(comptime Lhs: type, comptime op: []const u8, comptime Rhs: type) type {
                 _ = Lhs;
                 _ = op;
@@ -497,7 +481,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }{});
 
         pub fn eval(comptime input: []const u8, comptime args: anytype) !Self {
-            return try comath.eval(input, geoCtx, spread(Blades, args));
+            return try comath.eval(input, geoCtx, args);
         }
 
         pub fn fromInt(num: anytype) Self {

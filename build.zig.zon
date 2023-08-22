@@ -3,8 +3,8 @@
     .version = "0.0.1",
     .dependencies = .{
         .comath = .{
-            .url = "https://github.com/InKryption/comath/archive/05f39e1cefc96f8829417d47018d7ed9919cc578.tar.gz",
-            .hash = "122007055eb14026c381b98991b9096a85cc54b3778f442838b39930eca794fcd843",
+            .url = "https://github.com/InKryption/comath/archive/b1b544b1521afb71471b32b2627195884e47a122.tar.gz",
+            .hash = "1220d9d95cd8aea3776edc8f99246a01dbb90df41bbf839fbe7f36a6628fed41cf1b",
         },
     },
 }

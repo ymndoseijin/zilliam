@@ -54,6 +54,7 @@ pub fn main() !void {
             var b = Bivector{};
             a.val[a_i] = 1;
             b.val[b_i] = 1;
+            // R is of type Rotor now (or, in general, an element in the even subalgebra of Alg)
             const r = Blades.mul(a, b);
             var buf: [2048]u8 = undefined;
             var r_s = try a.print(&buf);

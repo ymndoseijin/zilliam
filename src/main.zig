@@ -24,7 +24,7 @@ pub fn main() !void {
             var buf: [2048]u8 = undefined;
 
             // This is a Trivector, it gets properly dispatched
-            const res = a.mul(b);
+            const res = a.wedge(b);
 
             for (0..2) |i| {
                 const r_w = res.get(i);

@@ -24,14 +24,18 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
             const Result = T.anticommuteResult(quadratic_form, T, @TypeOf(b).Type);
             var vec: [Result.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** (Result.Count);
 
-            const identity = std.simd.iota(i32, Alg.BasisNum + 1);
+            const identity = comptime std.simd.iota(i32, Alg.BasisNum + 1);
+
+            const b_t = @TypeOf(b);
 
             const result_mask_to = if (Result == Alg) identity else Result.MaskTo;
+            const t_mask = if (T == Alg) identity else T.Mask;
+            const b_mask = if (b_t.Type == Alg) identity else b_t.Type.Mask;
 
             inline for (0..T.Count) |a_i| {
-                inline for (0..@TypeOf(b).Type.Count) |b_i| {
-                    const a_idx = comptime T.Mask[a_i];
-                    const b_idx = comptime @TypeOf(b).Type.Mask[b_i];
+                inline for (0..b_t.Type.Count) |b_i| {
+                    const a_idx = comptime t_mask[a_i];
+                    const b_idx = comptime b_mask[b_i];
 
                     if (a_idx != -1 and b_idx != -1) {
                         const res = comptime Alg.memoizedMultiplyBasis(quadratic_form, a_idx, b_idx);
@@ -56,6 +60,22 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
 
         pub fn wedge(a: @This(), b: anytype) getBatchTypeGen(Alg, T.anticommuteResult(.zero, T, @TypeOf(b).Type), LenMul) {
             return anticommuteBatch(a, .zero, b);
+        }
+
+        pub fn sub(a: @This(), b: anytype) @This() {
+            const vec: [T.Count]@Vector(LenMul, Alg.Type) = a.val;
+            for (a.val, b.val, &vec) |a_elem, b_elem, *v_elem| {
+                v_elem.* = a_elem - b_elem;
+            }
+            return .{ .val = vec };
+        }
+
+        pub fn add(a: @This(), b: anytype) @This() {
+            const vec: [T.Count]@Vector(LenMul, Alg.Type) = a.val;
+            for (a.val, b.val, &vec) |a_elem, b_elem, *v_elem| {
+                v_elem.* = a_elem + b_elem;
+            }
+            return .{ .val = vec };
         }
     };
 }
@@ -183,6 +203,9 @@ pub fn Blades(comptime Alg: type) type {
                         const res = op.Res;
                         var first = true;
                         var candidate: usize = 0;
+
+                        if (b.AlgebraType == .FullAlgebra) return b;
+
                         const a_k = a.K;
                         const b_k = b.K;
 

@@ -3,15 +3,17 @@ const std = @import("std");
 const Algebra = @import("geo.zig").Algebra;
 const Alg = Algebra(f32, 3, 0, 1);
 
+const Batch = Alg.getBatchType(VecSize);
+
 pub const VecSize = 8;
 
 const packed_vec = extern struct { val: [Alg.BasisNum + 1][VecSize]f32 };
 export fn wedge_abi_vec(a: packed_vec, b: packed_vec) packed_vec {
-    return .{ .val = Alg.anticommuteBatch(VecSize, a.val, .zero, b.val) };
+    return .{ .val = Batch.anticommuteBatch(Batch{ .val = a.val }, .zero, Batch{ .val = b.val }).val };
 }
 
 export fn mul_abi_vec(a: packed_vec, b: packed_vec) packed_vec {
-    return .{ .val = Alg.anticommuteBatch(VecSize, a.val, .pos, b.val) };
+    return .{ .val = Batch.anticommuteBatch(Batch{ .val = a.val }, .pos, Batch{ .val = b.val }).val };
 }
 
 pub const Size = 524288 / VecSize;

@@ -1,5 +1,6 @@
 const std = @import("std");
 const comath = @import("comath");
+const blades = @import("blades.zig");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
@@ -550,6 +551,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             };
         }
 
+        pub fn getBatchType(comptime LenMul: usize) type {
+            return blades.getBatchTypeGen(Self, Self, LenMul);
+        }
+
         pub fn anticommuteMemoize(comptime quadratic_form: Sign) type {
             const first_stage = firstStage(quadratic_form).Res;
 
@@ -562,25 +567,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub const negOp = anticommuteMemoize(.neg);
         pub const zeroOp = anticommuteMemoize(.zero);
 
-        pub fn anticommuteBatch(
-            comptime len_of_mul: usize,
-            a: [basis_num + 1]@Vector(len_of_mul, T),
-            comptime quadratic_form: Sign,
-            b: [basis_num + 1]@Vector(len_of_mul, T),
-        ) [basis_num + 1]@Vector(len_of_mul, T) {
-            var vec: [basis_num + 1]@Vector(len_of_mul, T) = .{.{0} ** len_of_mul} ** (basis_num + 1);
-            inline for (0..basis_num + 1) |a_i| {
-                inline for (0..basis_num + 1) |b_i| {
-                    const a_us = a[a_i];
-                    const b_us = b[b_i];
-                    const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
-
-                    const sign: @Vector(len_of_mul, T) = @splat(res[1]);
-
-                    vec[res[0]] += a_us * b_us * sign;
-                }
-            }
-            return vec;
+        pub fn anticommuteResult(comptime quadratic_form: Sign, comptime a: type, comptime b: type) type {
+            _ = quadratic_form;
+            _ = a;
+            _ = b;
+            return Self;
         }
 
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {

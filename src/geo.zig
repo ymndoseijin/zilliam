@@ -9,6 +9,35 @@ pub const Sign = enum {
     neg,
 };
 
+pub fn factorial(i: anytype) @TypeOf(i) {
+    if (i == 0) return 1;
+    return i * factorial(i - 1);
+}
+
+pub fn repeatType(comptime T: type) type {
+    return T.Blades[T.Blades.len - 1];
+}
+
+pub fn power(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
+    if (i == 0) @panic("no zero yet");
+    var loop = repeatType(@TypeOf(a)){};
+    inline for (0..i) |_| {
+        loop = loop.mul(a);
+    }
+    return loop;
+}
+
+pub fn outerExp(a: anytype) repeatType(@TypeOf(a)) {
+    var res = repeatType(@TypeOf(a)){};
+
+    inline for (0..20) |i| {
+        const fact = comptime factorial(i);
+        const term = power(a, i) / fact;
+        res.add(term);
+    }
+    return res;
+}
+
 fn basisRecursion(comptime dim: usize, start: usize, num: usize, length: usize, decls: anytype, index: *usize, tags: [dim]usize) void {
     if (num >= length - 1) {
         decls[index.*].count = length;

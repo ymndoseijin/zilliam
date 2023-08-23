@@ -44,8 +44,8 @@ const Bivector = Types[2];
 const Trivector = Types[3];
 
 pub fn main() !void {
-    const BivectorBatch = Blades.getBatchType(Bivector, 2);
-    const VectorBatch = Blades.getBatchType(Vector, 2);
+    const BivectorBatch = Bivector.getBatchType(2);
+    const VectorBatch = Vector.getBatchType(2);
 
     for (0..Bivector.Count) |a_i| {
         for (0..Vector.Count) |b_i| {
@@ -54,10 +54,10 @@ pub fn main() !void {
             a.val[a_i] = .{ 1, 2 };
             b.val[b_i] = .{ 1, 2 };
             var buf: [2048]u8 = undefined;
-            
+
+            // This is a Trivector, it gets properly dispatched
             for (0..2) |i| {
-                // This is a Trivector, it gets properly dispatched
-                const r_w = a.wedge(b).get(i);
+                const r_w = a.mul(b).get(i);
 
                 var r_s = try a.get(i).print(&buf);
                 std.debug.print("{s} ^ ", .{r_s});

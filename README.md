@@ -35,11 +35,6 @@ As you can see, it also uses the amazing [comath](https://github.com/InKryption/
 
 In the case where you know the grade of the multivectors you are working with (which is most practical cases), zilliam generates types for like k-vector plus the even subalgebra and dispatches among them.
 ```zig
-const std = @import("std");
-
-const Algebra = @import("geo.zig").Algebra;
-const getBlades = @import("blades.zig").Blades;
-
 const Alg = Algebra(f32, 3, 0, 1);
 const Blades = getBlades(Alg);
 const Types = Blades.Types;
@@ -49,29 +44,37 @@ const Bivector = Types[2];
 const Trivector = Types[3];
 
 pub fn main() !void {
-    const BivectorBatch = Blades.getBatch(Bivector, 1);
-    const VectorBatch = Blades.getBatch(Vector, 1);
+    const BivectorBatch = Blades.getBatchType(Bivector, 2);
+    const VectorBatch = Blades.getBatchType(Vector, 2);
 
     for (0..Bivector.Count) |a_i| {
         for (0..Vector.Count) |b_i| {
             var a = BivectorBatch{};
             var b = VectorBatch{};
-            a.val[a_i] = .{1};
-            b.val[b_i] = .{1};
+            a.val[a_i] = .{ 1, 2 };
+            b.val[b_i] = .{ 1, 2 };
             var buf: [2048]u8 = undefined;
+            
+            for (0..2) |i| {
+                // This is a Trivector, it gets properly dispatched
+                const r_w = a.wedge(b).get(i);
 
-            // This is a Trivector, it gets properly dispatched
-            const r_w = a.wedge(b).get(0);
-
-            var r_s = try a.get(0).print(&buf);
-            std.debug.print("\n{s} ^ ", .{r_s});
-            r_s = try b.get(0).print(&buf);
-            std.debug.print("{s} = ", .{r_s});
-            r_s = try r_w.print(&buf);
-            std.debug.print("{s}\n", .{r_s});
+                var r_s = try a.get(i).print(&buf);
+                std.debug.print("{s} ^ ", .{r_s});
+                r_s = try b.get(i).print(&buf);
+                std.debug.print("{s} = ", .{r_s});
+                r_s = try r_w.print(&buf);
+                std.debug.print("{s}\n", .{r_s});
+            }
+            std.debug.print("\n", .{});
         }
     }
 }
+
+// ...
+// 1.0000e13 ^ 1.0000e0 = 1.0000e013
+// 2.0000e13 ^ 2.0000e2 = -4.0000e123
+// ...
 ```
 
 # Todo

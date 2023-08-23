@@ -30,6 +30,7 @@ pub fn main() !void {
             var r_s = try a.print(&buf);
 
             const r_w = Blades.wedge(a, b);
+
             r_s = try a.print(&buf);
             std.debug.print("\n{s} ^ ", .{r_s});
             r_s = try b.print(&buf);

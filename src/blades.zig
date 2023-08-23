@@ -1,4 +1,6 @@
 const geo = @import("geo.zig");
+const std = @import("std");
+
 pub fn Blades(comptime Alg: type) type {
     const types = type_blk: {
         var res: [Alg.SumDim + 2]type = undefined;
@@ -192,6 +194,12 @@ pub fn Blades(comptime Alg: type) type {
             const b_t = @TypeOf(b);
             const Result = anticommuteResult(quadratic_form, a_t, b_t);
 
+            const identity = std.simd.iota(i32, Alg.BasisNum + 1);
+
+            const result_mask_to = if (Result == Alg) identity else Result.MaskTo;
+            const result_mask = if (Result == Alg) identity else Result.Mask;
+            const result_count = if (Result == Alg) Alg.BasisNum + 1 else Result.Count;
+
             var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
             const op = switch (quadratic_form) {
@@ -201,31 +209,31 @@ pub fn Blades(comptime Alg: type) type {
             };
 
             const ops = comptime ops_blk: {
-                var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
-                var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
-                var op_m: [op.Res[0].len][Result.Count]Alg.Type = undefined;
+                var op_a: [op.Res[0].len][result_count]i32 = undefined;
+                var op_b: [op.Res[0].len][result_count]i32 = undefined;
+                var op_m: [op.Res[0].len][result_count]Alg.Type = undefined;
                 var op_invalid: [op.Res[0].len]bool = undefined;
 
                 inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
                     const res = blk: {
-                        const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
+                        const nothings: @Vector(result_count, i32) = .{-1} ** result_count;
 
                         @setEvalBranchQuota(2108350);
-                        var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;
+                        var mask_a_mut: [result_count]i32 = .{-1} ** result_count;
                         for (sel_a, 0..) |to, from| {
-                            const mask_loc = Result.MaskTo[from];
+                            const mask_loc = result_mask_to[from];
                             if (mask_loc == -1 or to == -1) continue;
                             mask_a_mut[@intCast(mask_loc)] = a_t.MaskTo[to];
                         }
 
-                        var mask_b_mut: [Result.Count]i32 = .{-1} ** Result.Count;
+                        var mask_b_mut: [result_count]i32 = .{-1} ** result_count;
                         for (sel_b, 0..) |to, from| {
-                            const mask_loc = Result.MaskTo[from];
+                            const mask_loc = result_mask_to[from];
                             if (mask_loc == -1 or to == -1) continue;
                             mask_b_mut[@intCast(mask_loc)] = b_t.MaskTo[to];
                         }
 
-                        var mul_mut: [Result.Count]Alg.Type = @shuffle(Alg.Type, mult, mult, Result.Mask);
+                        var mul_mut: [result_count]Alg.Type = @shuffle(Alg.Type, mult, mult, result_mask);
                         for (&mul_mut, 0..) |*val, i| {
                             if (mask_a_mut[i] == -1 or mask_b_mut[i] == -1) val.* = 0;
                         }

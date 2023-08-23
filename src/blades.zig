@@ -155,38 +155,60 @@ pub fn Blades(comptime Alg: type) type {
             return anticommute_blade(.zero, a, b);
         }
 
-        pub fn anticommuteBatch(
-            comptime a_t: type,
-            comptime b_t: type,
-            comptime len_of_mul: usize,
-            a: [a_t.Count]@Vector(len_of_mul, Alg.Type),
-            comptime quadratic_form: geo.Sign,
-            b: [b_t.Count]@Vector(len_of_mul, Alg.Type),
-        ) [anticommuteResult(quadratic_form, a_t, b_t).Count]@Vector(len_of_mul, Alg.Type) {
-            var vec: [Alg.BasisNum + 1]@Vector(len_of_mul, Alg.Type) = .{.{0} ** len_of_mul} ** (Alg.BasisNum + 1);
+        pub fn getBatchType(comptime T: type, comptime LenMul: usize) type {
+            return struct {
+                pub const Type = T;
+                val: [T.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** T.Count,
+                pub fn get(vec: @This(), i: usize) T {
+                    var res: [T.Count]Alg.Type = undefined;
+                    for (vec.val, 0..) |v, v_i| {
+                        res[v_i] = v[i];
+                    }
+                    return .{ .val = res };
+                }
 
-            const Result = anticommuteResult(quadratic_form, a_t, b_t);
+                pub fn anticommuteBatch(
+                    a: @This(),
+                    comptime quadratic_form: geo.Sign,
+                    b: anytype,
+                ) getBatchType(anticommuteResult(quadratic_form, T, @TypeOf(b).Type), LenMul) {
+                    const Result = anticommuteResult(quadratic_form, T, @TypeOf(b).Type);
+                    var vec: [Result.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** (Result.Count);
 
-            inline for (0..a_t.Count) |a_i| {
-                inline for (0..b_t.Count) |b_i| {
-                    const a_idx = comptime a_t.Mask[a_i];
-                    const b_idx = comptime b_t.Mask[b_i];
+                    const identity = std.simd.iota(i32, Alg.BasisNum + 1);
 
-                    if (a_idx != -1 and b_idx != -1) {
-                        const res = comptime Alg.memoizedMultiplyBasis(.pos, a_idx, b_idx);
+                    const result_mask_to = if (Result == Alg) identity else Result.MaskTo;
 
-                        const sign: Alg.Type = res[1];
-                        const a_us = a[a_i];
-                        const b_us = b[b_i];
-                        const r_idx: usize = @intCast(Result.MaskTo[res[0]]);
-                        if (sign != 0) {
-                            const actual_sign: @Vector(len_of_mul, Alg.Type) = @splat(res[1]);
-                            vec[r_idx] += a_us * b_us * actual_sign;
+                    inline for (0..T.Count) |a_i| {
+                        inline for (0..@TypeOf(b).Type.Count) |b_i| {
+                            const a_idx = comptime T.Mask[a_i];
+                            const b_idx = comptime @TypeOf(b).Type.Mask[b_i];
+
+                            if (a_idx != -1 and b_idx != -1) {
+                                const res = comptime Alg.memoizedMultiplyBasis(quadratic_form, a_idx, b_idx);
+
+                                const sign: Alg.Type = res[1];
+                                const a_us = a.val[a_i];
+                                const b_us = b.val[b_i];
+                                const r_idx = result_mask_to[res[0]];
+                                if (sign != 0 and r_idx != -1) {
+                                    const actual_sign: @Vector(LenMul, Alg.Type) = @splat(res[1]);
+                                    vec[@intCast(r_idx)] += a_us * b_us * actual_sign;
+                                }
+                            }
                         }
                     }
+                    return .{ .val = vec };
                 }
-            }
-            return vec;
+
+                pub fn mul(a: @This(), b: anytype) getBatchType(anticommuteResult(.pos, T, @TypeOf(b).Type), LenMul) {
+                    return anticommuteBatch(a, .pos, b);
+                }
+
+                pub fn wedge(a: @This(), b: anytype) getBatchType(anticommuteResult(.zero, T, @TypeOf(b).Type), LenMul) {
+                    return anticommuteBatch(a, .zero, b);
+                }
+            };
         }
 
         pub fn anticommute_blade(comptime quadratic_form: geo.Sign, a: anytype, b: anytype) anticommuteResult(quadratic_form, @TypeOf(a), @TypeOf(b)) {

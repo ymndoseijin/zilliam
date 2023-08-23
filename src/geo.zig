@@ -76,6 +76,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         const Self = @This();
         pub const Indices = indices;
         pub const BasisNum = basis_num;
+        pub const Count = basis_num + 1;
         pub const Type = T;
         pub const SumDim = sum_of_dim;
 

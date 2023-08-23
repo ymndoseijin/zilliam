@@ -24,8 +24,10 @@ pub fn main() !void {
             var buf: [2048]u8 = undefined;
 
             // This is a Trivector, it gets properly dispatched
+            const res = a.mul(b);
+
             for (0..2) |i| {
-                const r_w = a.mul(b).get(i);
+                const r_w = res.get(i);
 
                 var r_s = try a.get(i).print(&buf);
                 std.debug.print("{s} ^ ", .{r_s});
@@ -38,3 +40,8 @@ pub fn main() !void {
         }
     }
 }
+
+// ...
+// 1.0000e13 ^ 1.0000e0 = 1.0000e013
+// 2.0000e13 ^ 2.0000e0 = 4.0000e013
+// ...

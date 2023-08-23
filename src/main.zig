@@ -21,7 +21,7 @@ pub fn main() !void {
         var c = Bivector{};
         c.val[a_i] = 1;
 
-        const calc = geo.outerExp(c, 20);
+        const calc = geo.outerSin(c, 10);
         std.debug.print("val: {s}\n", .{try calc.print(&buf)});
 
         for (0..Vector.Count) |b_i| {

@@ -15,12 +15,12 @@ pub const AlgebraEnum = enum {
     BatchAlgebra,
 };
 
-pub fn factorial(i: anytype) @TypeOf(i) {
+fn factorial(i: anytype) @TypeOf(i) {
     if (i == 0) return 1;
     return i * factorial(i - 1);
 }
 
-pub fn repeatType(comptime T: type) type {
+fn repeatType(comptime T: type) type {
     switch (T.AlgebraType) {
         .FullAlgebra => return T,
         .SubAlgebra => return T.anticommuteResult(.pos, T, T),
@@ -42,13 +42,48 @@ fn comptimePower(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
     return loop;
 }
 
+pub fn outerCos(a: anytype, comptime precision: usize) repeatType(@TypeOf(a)) {
+    const Result = repeatType(@TypeOf(a));
+    var res = Result{};
+
+    inline for (0..precision) |i| {
+        const val: comptime_int = 2 * i;
+        const fact: @Vector(Result.Count, Result.Algebra.Type) = @splat(@as(Result.Algebra.Type, comptime factorial(val)));
+        const term = Result{ .val = comptimePower(a, val).val / fact };
+        if (i % 2 == 0) {
+            res = res.add(term);
+        } else {
+            res = res.sub(term);
+        }
+    }
+    return res;
+}
+
+pub fn outerSin(a: anytype, comptime precision: usize) repeatType(@TypeOf(a)) {
+    const Result = repeatType(@TypeOf(a));
+    var res = Result{};
+
+    inline for (0..precision) |i| {
+        const val: comptime_int = 2 * i + 1;
+        const fact: @Vector(Result.Count, Result.Algebra.Type) = @splat(@as(Result.Algebra.Type, comptime factorial(val)));
+        const term = Result{ .val = comptimePower(a, val).val / fact };
+        if (i % 2 == 0) {
+            res = res.add(term);
+        } else {
+            res = res.sub(term);
+        }
+    }
+    return res;
+}
+
 pub fn outerExp(a: anytype, comptime precision: usize) repeatType(@TypeOf(a)) {
     const Result = repeatType(@TypeOf(a));
     var res = Result{};
 
     inline for (0..precision) |i| {
-        const fact: @Vector(Result.Count, Result.Algebra.Type) = @splat(comptime factorial(i));
-        const term = Result{ .val = comptimePower(a, i).val / fact };
+        const val: comptime_int = i;
+        const fact: @Vector(Result.Count, Result.Algebra.Type) = @splat(@as(Result.Algebra.Type, comptime factorial(val)));
+        const term = Result{ .val = comptimePower(a, val).val / fact };
         res = res.add(term);
     }
     return res;

@@ -161,6 +161,11 @@ pub fn Blades(comptime Alg: type) type {
                         return .{ .val = @shuffle(Alg.Type, a.val, neverweres, mask_a_mut) };
                     }
 
+                    pub fn sub(a: BladeType, b: anytype) BladeType {
+                        const vec: @Vector(Count, Alg.Type) = a.val;
+                        return .{ .val = vec - b.toK(K).val };
+                    }
+
                     pub fn add(a: BladeType, b: anytype) BladeType {
                         const vec: @Vector(Count, Alg.Type) = a.val;
                         return .{ .val = vec + b.toK(K).val };

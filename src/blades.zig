@@ -1,9 +1,12 @@
 const geo = @import("geo.zig");
 const std = @import("std");
 
-pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime LenMul: usize) type {
+pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: usize) type {
     return struct {
         pub const Type = T;
+        pub const LenMul = len_mul;
+        pub const Algebra = Alg;
+
         val: [T.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** T.Count,
         pub fn get(vec: @This(), i: usize) T {
             var res: [T.Count]Alg.Type = undefined;
@@ -125,6 +128,10 @@ pub fn Blades(comptime Alg: type) type {
                     pub const Count = blade_count;
                     pub const K = k;
                     pub const Types = res_ptr;
+                    pub const Identity: BladeType = .{ .val = .{1} ** Count };
+                    pub const Algebra = Alg;
+                    pub const AlgebraType = geo.AlgebraEnum.SubAlgebra;
+
                     val: [Count]Alg.Type = .{0} ** Count,
 
                     const BladeType = @This();
@@ -137,6 +144,26 @@ pub fn Blades(comptime Alg: type) type {
 
                     pub fn getBatchType(comptime LenMul: usize) type {
                         return getBatchTypeGen(Alg, BladeType, LenMul);
+                    }
+
+                    pub fn toK(a: BladeType, comptime K_res: usize) Types[K_res] {
+                        const result_count = Types[K_res].Count;
+                        const mask_a_mut = comptime blk: {
+                            var temp: [result_count]i32 = .{-1} ** result_count;
+                            for (0..Count) |i| {
+                                const mask_loc = Types[K_res].MaskTo[Mask[i]];
+                                if (mask_loc == -1) @compileError("Invalid K");
+                                temp[@intCast(mask_loc)] = i;
+                            }
+                            break :blk temp;
+                        };
+                        const neverweres: @Vector(Count, Alg.Type) = .{0} ** Count;
+                        return .{ .val = @shuffle(Alg.Type, a.val, neverweres, mask_a_mut) };
+                    }
+
+                    pub fn add(a: BladeType, b: anytype) BladeType {
+                        const vec: @Vector(Count, Alg.Type) = a.val;
+                        return .{ .val = vec + b.toK(K).val };
                     }
 
                     pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime a: type, comptime b: type) type {
@@ -153,6 +180,10 @@ pub fn Blades(comptime Alg: type) type {
                         var candidate: usize = 0;
                         const a_k = a.K;
                         const b_k = b.K;
+
+                        // even
+                        if (a_k == Alg.SumDim + 1 or b_k == Alg.SumDim + 1) return Types[Types.len - 1];
+
                         for (res[0], res[1]) |sel_a, sel_b| {
                             for (sel_a, sel_b, 0..) |val_a, val_b, i| {
                                 if (val_a == -1 or val_b == -1) continue;

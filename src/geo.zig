@@ -9,31 +9,47 @@ pub const Sign = enum {
     neg,
 };
 
+pub const AlgebraEnum = enum {
+    FullAlgebra,
+    SubAlgebra,
+    BatchAlgebra,
+};
+
 pub fn factorial(i: anytype) @TypeOf(i) {
     if (i == 0) return 1;
     return i * factorial(i - 1);
 }
 
 pub fn repeatType(comptime T: type) type {
-    return T.Blades[T.Blades.len - 1];
+    switch (T.AlgebraType) {
+        .FullAlgebra => return T,
+        .SubAlgebra => return T.anticommuteResult(.pos, T, T),
+        .BatchAlgebra => return T.getBatchTypeGen(T.Algebra, T.Type.anticommuteResult(.pos, T.Type, T.Type), T.LenMul),
+    }
 }
 
-pub fn power(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
-    if (i == 0) @panic("no zero yet");
-    var loop = repeatType(@TypeOf(a)){};
-    inline for (0..i) |_| {
-        loop = loop.mul(a);
+fn comptimePower(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
+    if (i == 0) {
+        var res = repeatType(@TypeOf(a)){};
+        res.val[0] = 1;
+        return res;
+    }
+    var a_c = a.toK(repeatType(@TypeOf(a)).K);
+    var loop = a_c;
+    inline for (0..i - 1) |_| {
+        loop = loop.mul(a_c);
     }
     return loop;
 }
 
-pub fn outerExp(a: anytype) repeatType(@TypeOf(a)) {
-    var res = repeatType(@TypeOf(a)){};
+pub fn outerExp(a: anytype, comptime precision: usize) repeatType(@TypeOf(a)) {
+    const Result = repeatType(@TypeOf(a));
+    var res = Result{};
 
-    inline for (0..20) |i| {
-        const fact = comptime factorial(i);
-        const term = power(a, i) / fact;
-        res.add(term);
+    inline for (0..precision) |i| {
+        const fact: @Vector(Result.Count, Result.Algebra.Type) = @splat(comptime factorial(i));
+        const term = Result{ .val = comptimePower(a, i).val / fact };
+        res = res.add(term);
     }
     return res;
 }
@@ -108,6 +124,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub const Count = basis_num + 1;
         pub const Type = T;
         pub const SumDim = sum_of_dim;
+        pub const AlgebraType = AlgebraEnum.FullAlgebra;
 
         pub fn getBladeCount(comptime k: usize) usize {
             var total: usize = 0;
@@ -694,7 +711,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     _ = try writer.print(" + ", .{});
                 }
                 if (index == 0) {
-                    _ = try writer.print("{}", .{val});
+                    _ = try writer.print("{d:.4}", .{val});
                 } else {
                     const basis = indices[index];
                     _ = try writer.print("{d:.4}e", .{val});

@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const Algebra = @import("geo.zig").Algebra;
+const geo = @import("geo.zig");
+const Algebra = geo.Algebra;
 const getBlades = @import("blades.zig").Blades;
 
 const Alg = Algebra(f32, 3, 0, 1);
@@ -15,13 +16,19 @@ pub fn main() !void {
     const BivectorBatch = Bivector.getBatchType(2);
     const VectorBatch = Vector.getBatchType(2);
 
+    var buf: [2048]u8 = undefined;
     for (0..Bivector.Count) |a_i| {
+        var c = Bivector{};
+        c.val[a_i] = 1;
+
+        const calc = geo.outerExp(c, 20);
+        std.debug.print("val: {s}\n", .{try calc.print(&buf)});
+
         for (0..Vector.Count) |b_i| {
             var a = BivectorBatch{};
             var b = VectorBatch{};
             a.val[a_i] = .{ 1, 2 };
             b.val[b_i] = .{ 1, 2 };
-            var buf: [2048]u8 = undefined;
 
             // This is a Trivector, it gets properly dispatched
             const res = a.wedge(b);
@@ -36,6 +43,7 @@ pub fn main() !void {
                 r_s = try r_w.print(&buf);
                 std.debug.print("{s}\n", .{r_s});
             }
+
             std.debug.print("\n", .{});
         }
     }

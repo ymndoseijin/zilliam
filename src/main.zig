@@ -17,10 +17,6 @@ export fn mul_abi(a: packed_vec, b: packed_vec) packed_res {
     return .{ .val = Blades.mul(Bivector{ .val = a.val }, Bivector{ .val = b.val }).val };
 }
 
-export fn wedge_abi(a: packed_vec, b: packed_vec) packed_res {
-    return .{ .val = Blades.wedge(Bivector{ .val = a.val }, Bivector{ .val = b.val }).val };
-}
-
 pub fn main() !void {
     for (0..Bivector.Count) |a_i| {
         for (0..Bivector.Count) |b_i| {

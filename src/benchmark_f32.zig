@@ -1,7 +1,8 @@
 const std = @import("std");
+const vec = @import("benchmark_vec.zig");
 
 const Algebra = @import("geo.zig").Algebra;
-const Alg = Algebra(f32, 3, 0, 0);
+const Alg = Algebra(f32, 3, 0, 1);
 
 const packed_vec = extern struct { val: [Alg.BasisNum + 1]f32 };
 export fn wedge_abi(a: packed_vec, b: packed_vec) packed_vec {
@@ -42,27 +43,25 @@ export fn regressive_abi(a: packed_vec, b: packed_vec) packed_vec {
 
 pub fn main() !void {
     var checksum: @Vector(Alg.BasisNum + 1, f32) = .{0} ** (Alg.BasisNum + 1);
-    for (0..500) |i| {
-        for (0..500) |j| {
-            const i_v: packed_vec = blk: {
-                var temp: [Alg.BasisNum + 1]f32 = undefined;
-                inline for (&temp, 0..) |*v, v_i| {
-                    v.* = v_i * @as(f32, @floatFromInt(i));
-                }
-                break :blk .{ .val = temp };
-            };
-            const j_v: packed_vec = blk: {
-                var temp: [Alg.BasisNum + 1]f32 = undefined;
-                inline for (&temp, 0..) |*v, v_i| {
-                    v.* = v_i * @as(f32, @floatFromInt(j));
-                }
-                break :blk .{ .val = temp };
-            };
-            checksum += @call(.never_inline, mul_abi, .{ i_v, j_v }).val;
-            checksum += @call(.never_inline, wedge_abi, .{ i_v, j_v }).val;
-            //checksum += @call(.never_inline, inner_abi, .{ i_v, j_v }).val;
-            //checksum += @call(.never_inline, regressive_abi, .{ i_v, j_v }).val;
-        }
+    for (0..vec.Size * vec.VecSize) |i| {
+        const i_v: packed_vec = blk: {
+            var temp: [Alg.BasisNum + 1]f32 = undefined;
+            inline for (&temp, 0..) |*v, v_i| {
+                v.* = v_i * @as(f32, @floatFromInt(i));
+            }
+            break :blk .{ .val = temp };
+        };
+        const j_v: packed_vec = blk: {
+            var temp: [Alg.BasisNum + 1]f32 = undefined;
+            inline for (&temp, 0..) |*v, v_i| {
+                v.* = v_i * @as(f32, @floatFromInt(i + 1));
+            }
+            break :blk .{ .val = temp };
+        };
+        checksum += @call(.never_inline, mul_abi, .{ i_v, j_v }).val;
+        checksum += @call(.never_inline, wedge_abi, .{ i_v, j_v }).val;
+        //checksum += @call(.never_inline, inner_abi, .{ i_v, j_v }).val;
+        //checksum += @call(.never_inline, regressive_abi, .{ i_v, j_v }).val;
     }
 
     std.debug.print("{any}\n", .{checksum});

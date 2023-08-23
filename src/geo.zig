@@ -594,7 +594,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return .{ r, sign };
         }
 
-        fn memoizedMultiplyBasis(comptime quadratic_form: Sign, a_i: usize, b_i: usize) struct { usize, i32 } {
+        fn memoizedMultiplyBasis(comptime quadratic_form: Sign, a_i: usize, b_i: usize) struct { usize, T } {
             const res = switch (quadratic_form) {
                 .pos => .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] },
                 .neg => .{ negMatrix[0][a_i][b_i], negMatrix[1][a_i][b_i] },
@@ -730,6 +730,27 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub const posOp = anticommuteMemoize(.pos);
         pub const negOp = anticommuteMemoize(.neg);
         pub const zeroOp = anticommuteMemoize(.zero);
+
+        pub fn anticommuteBatch(
+            comptime len_of_mul: usize,
+            a: [basis_num + 1]@Vector(len_of_mul, T),
+            comptime quadratic_form: Sign,
+            b: [basis_num + 1]@Vector(len_of_mul, T),
+        ) [basis_num + 1]@Vector(len_of_mul, T) {
+            var vec: [basis_num + 1]@Vector(len_of_mul, T) = .{.{0} ** len_of_mul} ** (basis_num + 1);
+            inline for (0..basis_num + 1) |a_i| {
+                inline for (0..basis_num + 1) |b_i| {
+                    const a_us = a[a_i];
+                    const b_us = b[b_i];
+                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+
+                    const sign: @Vector(len_of_mul, T) = @splat(res[1]);
+
+                    vec[res[0]] += a_us * b_us * sign;
+                }
+            }
+            return vec;
+        }
 
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
             var c: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);

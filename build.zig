@@ -10,7 +10,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    inline for (.{ .{ "src/main.zig", "zilliam" }, .{ "src/benchmark.zig", "benchmark" } }) |val| {
+    inline for (.{
+        .{ "src/main.zig", "zilliam" },
+        .{ "src/benchmark_f32.zig", "benchmark-f32" },
+        .{ "src/benchmark_vec.zig", "benchmark-vec" },
+    }) |val| {
         const exe = b.addExecutable(.{
             .name = val[1],
             .root_source_file = .{ .path = val[0] },

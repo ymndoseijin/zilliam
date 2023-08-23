@@ -38,9 +38,10 @@ In the case where you know the grade of the multivectors you are working with (w
 const std = @import("std");
 
 const Algebra = @import("geo.zig").Algebra;
+const blades = @import("blades.zig");
 
 const Alg = Algebra(f32, 3, 0, 1);
-const Blades = Alg.getBladeType();
+const Blades = blades.Blades(Alg);
 const Types = Blades.Types;
 
 const Bivector = Types[2];

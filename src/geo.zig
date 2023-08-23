@@ -3,6 +3,12 @@ const comath = @import("comath");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
+pub const Sign = enum {
+    pos,
+    zero,
+    neg,
+};
+
 fn basisRecursion(comptime dim: usize, start: usize, num: usize, length: usize, decls: anytype, index: *usize, tags: [dim]usize) void {
     if (num >= length - 1) {
         decls[index.*].count = length;
@@ -70,6 +76,18 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         const Self = @This();
         pub const Indices = indices;
         pub const BasisNum = basis_num;
+        pub const Type = T;
+        pub const SumDim = sum_of_dim;
+
+        pub fn getBladeCount(comptime k: usize) usize {
+            var total: usize = 0;
+            for (indices) |data| {
+                if (data.count == k) {
+                    total += 1;
+                }
+            }
+            return total;
+        }
 
         const blade_types = blk: {
             var struct_fields: [basis_num]std.builtin.Type.StructField = undefined;
@@ -137,269 +155,6 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         pub fn set(a: *Self, blade: BladeEnum, val: T) void {
             a.val[@intFromEnum(blade) + 1] = val;
-        }
-
-        pub fn getBladeCount(comptime k: usize) usize {
-            var total: usize = 0;
-            for (indices) |data| {
-                if (data.count == k) {
-                    total += 1;
-                }
-            }
-            return total;
-        }
-
-        pub fn getBladeType() type {
-            const types = type_blk: {
-                var res: [sum_of_dim + 2]type = undefined;
-                inline for (0..sum_of_dim + 1) |k| {
-                    const it = blk: {
-                        const count = comptime getBladeCount(k);
-
-                        const mask = mask_blk: {
-                            var temp: [count]i32 = undefined;
-
-                            var index: usize = 0;
-                            for (indices, 0..) |data, i| {
-                                if (data.count == k) {
-                                    temp[index] = i;
-                                    index += 1;
-                                }
-                            }
-                            break :mask_blk temp;
-                        };
-
-                        const mask_to = mask_blk: {
-                            var temp: [basis_num + 1]i32 = .{-1} ** (basis_num + 1);
-
-                            var index: usize = 0;
-                            for (indices, 0..) |data, i| {
-                                if (data.count == k) {
-                                    temp[i] = index;
-                                    index += 1;
-                                }
-                            }
-                            break :mask_blk temp;
-                        };
-
-                        break :blk struct {
-                            pub const Mask = mask;
-                            pub const MaskTo = mask_to;
-                            pub const Count = count;
-                            pub const K = k;
-                            val: [count]T = .{0} ** count,
-
-                            pub fn print(a: @This(), buf: []u8) ![]const u8 {
-                                const zeroes: @Vector(count, T) = .{0} ** count;
-                                var val = Self{ .val = @shuffle(T, a.val, zeroes, mask_to) };
-                                return val.print(buf);
-                            }
-                        };
-                    };
-                    res[k] = it;
-                }
-
-                const count = blk: {
-                    var temp: usize = 0;
-                    for (indices) |data| {
-                        if (data.count % 2 == 0) temp += 1;
-                    }
-                    break :blk temp;
-                };
-
-                const mask = mask_blk: {
-                    var temp: [count]i32 = undefined;
-
-                    var index: usize = 0;
-                    for (indices, 0..) |data, i| {
-                        if (data.count % 2 == 0) {
-                            temp[index] = i;
-                            index += 1;
-                        }
-                    }
-                    break :mask_blk temp;
-                };
-
-                const mask_to = mask_blk: {
-                    var temp: [basis_num + 1]i32 = .{-1} ** (basis_num + 1);
-
-                    var index: usize = 0;
-                    for (indices, 0..) |data, i| {
-                        if (data.count % 2 == 0) {
-                            temp[i] = index;
-                            index += 1;
-                        }
-                    }
-                    break :mask_blk temp;
-                };
-
-                res[sum_of_dim + 1] = struct {
-                    pub const Mask = mask;
-                    pub const MaskTo = mask_to;
-                    pub const Count = count;
-                    pub const K = basis_num;
-                    val: [count]T = .{0} ** count,
-
-                    pub fn print(a: @This(), buf: []u8) ![]const u8 {
-                        const zeroes: @Vector(count, T) = .{0} ** count;
-                        var val = Self{ .val = @shuffle(T, a.val, zeroes, mask_to) };
-                        return val.print(buf);
-                    }
-                };
-
-                break :type_blk res;
-            };
-
-            return struct {
-                pub const Types = types;
-
-                pub fn anticommuteResult(comptime quadratic_form: Sign, comptime a: type, comptime b: type) type {
-                    @setEvalBranchQuota(1219541);
-
-                    const op = switch (quadratic_form) {
-                        .pos => posOp,
-                        .neg => negOp,
-                        .zero => zeroOp,
-                    };
-
-                    const res = op.Res;
-                    var first = true;
-                    var candidate: usize = 0;
-                    const a_k = a.K;
-                    const b_k = b.K;
-                    for (res[0], res[1]) |sel_a, sel_b| {
-                        for (sel_a, sel_b, 0..) |val_a, val_b, i| {
-                            if (val_a == -1 or val_b == -1) continue;
-                            const k_1 = indices[val_a].count;
-                            const k_2 = indices[val_b].count;
-                            if ((k_1 == a_k and k_2 == b_k) or
-                                (k_1 == b_k and k_2 == a_k))
-                            {
-                                if (first) {
-                                    candidate = indices[i].count;
-                                    first = false;
-                                } else if (indices[i].count != candidate) {
-                                    if ((candidate % 2 == 0 and indices[i].count % 2 == 0) or
-                                        (candidate == Types.len - 1))
-                                    {
-                                        candidate = Types.len - 1;
-                                        continue;
-                                    }
-                                    return Self;
-                                }
-                            }
-                        }
-                    }
-
-                    return Types[candidate];
-                }
-
-                pub fn mul(a: anytype, b: anytype) anticommuteResult(.pos, @TypeOf(a), @TypeOf(b)) {
-                    return anticommute_blade(.pos, a, b);
-                }
-
-                pub fn wedge(a: anytype, b: anytype) anticommuteResult(.pos, @TypeOf(a), @TypeOf(b)) {
-                    return anticommute_blade(.zero, a, b);
-                }
-
-                pub fn anticommute_blade(comptime quadratic_form: Sign, a: anytype, b: anytype) anticommuteResult(quadratic_form, @TypeOf(a), @TypeOf(b)) {
-                    const a_t = @TypeOf(a);
-                    const b_t = @TypeOf(b);
-                    const Result = anticommuteResult(quadratic_form, a_t, b_t);
-
-                    var c: @Vector(Result.Count, T) = .{0} ** (Result.Count);
-
-                    const op = switch (quadratic_form) {
-                        .pos => posOp,
-                        .neg => negOp,
-                        .zero => zeroOp,
-                    };
-
-                    const ops = comptime ops_blk: {
-                        var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
-                        var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
-                        var op_m: [op.Res[0].len][Result.Count]T = undefined;
-                        var op_invalid: [op.Res[0].len]bool = undefined;
-
-                        inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
-                            const res = blk: {
-                                const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
-
-                                @setEvalBranchQuota(2108350);
-                                var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;
-                                for (sel_a, 0..) |to, from| {
-                                    const mask_loc = Result.MaskTo[from];
-                                    if (mask_loc == -1 or to == -1) continue;
-                                    mask_a_mut[@intCast(mask_loc)] = a_t.MaskTo[to];
-                                }
-
-                                var mask_b_mut: [Result.Count]i32 = .{-1} ** Result.Count;
-                                for (sel_b, 0..) |to, from| {
-                                    const mask_loc = Result.MaskTo[from];
-                                    if (mask_loc == -1 or to == -1) continue;
-                                    mask_b_mut[@intCast(mask_loc)] = b_t.MaskTo[to];
-                                }
-
-                                var mul_mut: [Result.Count]T = @shuffle(T, mult, mult, Result.Mask);
-                                for (&mul_mut, 0..) |*val, i| {
-                                    if (mask_a_mut[i] == -1 or mask_b_mut[i] == -1) val.* = 0;
-                                }
-
-                                break :blk .{ @reduce(.And, mask_a_mut == nothings) or @reduce(.And, mask_b_mut == nothings), mask_a_mut, mask_b_mut, mul_mut };
-                            };
-
-                            op_a[op_i] = res[1];
-                            op_b[op_i] = res[2];
-                            op_m[op_i] = res[3];
-                            op_invalid[op_i] = res[0];
-                        }
-
-                        for (op_a, op_b, op_m, 0..) |a_row, b_row, s_row, row_i| {
-                            for (a_row, b_row, s_row, 0..) |a_elem, b_elem, s_elem, elem_i| {
-                                if (s_elem != 0 and !op_invalid[row_i]) {
-                                    for (0..row_i) |rep_i| {
-                                        const s_rep = op_m[rep_i][elem_i];
-                                        if (op_invalid[rep_i]) continue;
-
-                                        if (s_rep == 0) {
-                                            op_m[rep_i][elem_i] = s_elem;
-                                            op_a[rep_i][elem_i] = a_elem;
-                                            op_b[rep_i][elem_i] = b_elem;
-                                            op_m[row_i][elem_i] = 0;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        break :ops_blk .{ op_a, op_b, op_m, op_invalid };
-                    };
-
-                    const op_a = ops[0];
-                    const op_b = ops[1];
-                    const op_m = ops[2];
-                    const op_invalid = ops[3];
-
-                    inline for (op_a, op_b, op_m, op_invalid) |mask_a, mask_b, mask_m, invalid| {
-                        //const neverweres: @Vector(Result.Count, T) = .{0} ** Result.Count;
-                        const mask_m_count = comptime blk: {
-                            var count: usize = 0;
-                            for (mask_m) |v| {
-                                if (v == 0) count += 1;
-                            }
-                            break :blk count;
-                        };
-                        if (invalid == false and (mask_m_count != Result.Count)) {
-                            var first = @shuffle(T, a.val, a.val, mask_a);
-                            var second = @shuffle(T, b.val, b.val, mask_b);
-                            c += first * second * mask_m;
-                        }
-                    }
-
-                    return Result{ .val = c };
-                }
-            };
         }
 
         // a*b: geo
@@ -489,12 +244,6 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             res.val[0] = num;
             return res;
         }
-
-        const Sign = enum {
-            pos,
-            zero,
-            neg,
-        };
 
         inline fn multiplyBasisWithSingle(comptime quadratic_form: Sign, i: usize, b_dim: usize) struct { usize, Sign } {
             // if it's a constant
@@ -594,7 +343,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return .{ r, sign };
         }
 
-        fn memoizedMultiplyBasis(comptime quadratic_form: Sign, a_i: usize, b_i: usize) struct { usize, T } {
+        pub fn memoizedMultiplyBasis(comptime quadratic_form: Sign, a_i: usize, b_i: usize) struct { usize, T } {
             const res = switch (quadratic_form) {
                 .pos => .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] },
                 .neg => .{ negMatrix[0][a_i][b_i], negMatrix[1][a_i][b_i] },
@@ -639,7 +388,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
             for (0..basis_num + 1) |a_i| {
                 for (0..basis_num + 1) |b_i| {
-                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+                    const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
                     var not_found = true;
 
@@ -674,7 +423,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
             for (0..basis_num + 1) |a_i| {
                 for (0..basis_num + 1) |b_i| {
-                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+                    const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
                     const sign: T = res[1];
 
@@ -742,7 +491,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 inline for (0..basis_num + 1) |b_i| {
                     const a_us = a[a_i];
                     const b_us = b[b_i];
-                    const res = memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+                    const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
                     const sign: @Vector(len_of_mul, T) = @splat(res[1]);
 

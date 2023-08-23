@@ -1,9 +1,12 @@
 const geo = @import("geo.zig");
+const blades = @import("blades.zig");
 const std = @import("std");
 
 pub fn PGA(comptime T: type, comptime dim: usize) type {
     return struct {
         pub const Algebra = geo.Algebra(T, dim, 0, 1);
+        pub const Blades = blades.Blades(Algebra);
+        pub const Line = Blades[2];
 
         pub fn point(vec: [dim]T) Algebra {
             var temp = Algebra{};

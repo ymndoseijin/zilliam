@@ -5,23 +5,26 @@ const std = @import("std");
 pub fn PGA(comptime T: type, comptime dim: usize) type {
     return struct {
         pub const Algebra = geo.Algebra(T, dim, 0, 1);
-        pub const Blades = blades.Blades(Algebra);
+        pub const Blades = blades.Blades(Algebra).Types;
 
-        pub fn point(vec: [dim]T) Algebra {
-            var temp = Algebra{};
-            for (vec, 0..) |val, i| {
-                temp.val[i + 2] = val;
+        pub const Point = Blades[1].HodgeResult;
+
+        pub fn point(vec: [dim]T) Point {
+            var temp = Blades[1]{};
+            for (0..dim) |i| {
+                temp.val[i + 1] = vec[i];
             }
             temp.set(.e0, 1);
-            return temp.dual();
+            return temp.hodge();
         }
 
-        pub fn normalize(a: Algebra) Algebra {
-            var coeff: @Vector(Algebra.BasisNum + 1, T) = @splat(a.get(.e12));
-            return Algebra{ .val = a.val / coeff };
+        pub fn normalize(a: anytype) @TypeOf(a) {
+            const U = @TypeOf(a);
+            var coeff: @Vector(U.Count, T) = @splat(a.get(.e12));
+            return U{ .val = a.val / coeff };
         }
 
-        pub fn getPoint(a: Algebra) [2]T {
+        pub fn getPoint(a: Point) [2]T {
             var val = normalize(a).dual();
             return .{ val.get(.e1), val.get(.e2) };
         }

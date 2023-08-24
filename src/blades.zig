@@ -52,11 +52,11 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
             return .{ .val = vec };
         }
 
-        pub fn mul(a: @This(), b: anytype) getBatchTypeGen(Alg, T.anticommuteResult(.pos, T, @TypeOf(b).Type), LenMul) {
+        pub fn mul(a: @This(), b: anytype) getBatchTypeGen(Alg, T.Mul(T, @TypeOf(b).Type), LenMul) {
             return anticommuteBatch(a, .pos, b);
         }
 
-        pub fn wedge(a: @This(), b: anytype) getBatchTypeGen(Alg, T.anticommuteResult(.zero, T, @TypeOf(b).Type), LenMul) {
+        pub fn wedge(a: @This(), b: anytype) getBatchTypeGen(Alg, T.Wedge(T, @TypeOf(b).Type), LenMul) {
             return anticommuteBatch(a, .zero, b);
         }
 
@@ -189,7 +189,15 @@ pub fn Blades(comptime Alg: type) type {
                         return .{ .val = vec + b.toK(Types[K]).val };
                     }
 
-                    const HodgeResult = Types[Alg.Indices[Alg.BasisNum - Mask[0]].count];
+                    pub fn get(a: BladeType, blade: Alg.BladeEnum) Alg.Type {
+                        return a.val[@intCast(MaskTo[@intFromEnum(blade) + 1])];
+                    }
+
+                    pub fn set(a: *BladeType, blade: Alg.BladeEnum, val: Alg.Type) void {
+                        a.val[@intCast(MaskTo[@intFromEnum(blade) + 1])] = val;
+                    }
+
+                    pub const HodgeResult = Types[Alg.Indices[Alg.BasisNum - Mask[0]].count];
 
                     const shuffle_mask = blk: {
                         const Size = HodgeResult.Count;
@@ -243,7 +251,7 @@ pub fn Blades(comptime Alg: type) type {
                         return unhodge(a);
                     }
 
-                    pub fn regressive(a: BladeType, b: BladeType) Wedge(HodgeResult, HodgeResult).HodgeResult {
+                    pub fn regressive(a: BladeType, b: anytype) Wedge(HodgeResult, @TypeOf(b).HodgeResult).HodgeResult {
                         return a.dual().wedge(b.dual()).undual();
                     }
 

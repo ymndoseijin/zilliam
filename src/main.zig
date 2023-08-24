@@ -14,7 +14,7 @@ const Trivector = Types[3];
 
 pub fn main() !void {
     const BivectorBatch = Bivector.getBatchType(2);
-    //const VectorBatch = Vector.getBatchType(2);
+    const VectorBatch = Vector.getBatchType(2);
 
     var buf: [2048]u8 = undefined;
     for (0..Bivector.Count) |a_i| {
@@ -23,9 +23,9 @@ pub fn main() !void {
 
         const calc = geo.outerExp(c, 10);
         std.debug.print("val: {s}\n", .{try calc.print(&buf)});
-        for (0..Bivector.Count) |b_i| {
+        for (0..Vector.Count) |b_i| {
             var a = BivectorBatch{};
-            var b = BivectorBatch{};
+            var b = VectorBatch{};
 
             a.val[a_i] = .{ 1, 2 };
             b.val[b_i] = .{ 1, 2 };
@@ -51,7 +51,10 @@ pub fn main() !void {
                 std.debug.print("{s}\n", .{r_s});
 
                 r_s = try r_w.grade_involution().print(&buf);
-                std.debug.print("{s}\n", .{r_s});
+                std.debug.print("involution: {s}\n", .{r_s});
+
+                r_s = try b.get(i).hodge().print(&buf);
+                std.debug.print("hodge: {s} {}\n", .{ r_s, @TypeOf(b.get(i).hodge()).K });
             }
 
             std.debug.print("\n", .{});

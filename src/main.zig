@@ -21,12 +21,12 @@ pub fn main() !void {
         var c = Bivector{};
         c.val[a_i] = 1;
 
-        const calc = geo.outerSin(c, 10);
+        const calc = geo.outerExp(c, 10);
         std.debug.print("val: {s}\n", .{try calc.print(&buf)});
-
         for (0..Vector.Count) |b_i| {
             var a = BivectorBatch{};
             var b = VectorBatch{};
+
             a.val[a_i] = .{ 1, 2 };
             b.val[b_i] = .{ 1, 2 };
 
@@ -41,6 +41,8 @@ pub fn main() !void {
                 r_s = try b.get(i).print(&buf);
                 std.debug.print("{s} = ", .{r_s});
                 r_s = try r_w.print(&buf);
+                std.debug.print("{s}\n", .{r_s});
+                r_s = try b.get(i).hodge().print(&buf);
                 std.debug.print("{s}\n", .{r_s});
             }
 

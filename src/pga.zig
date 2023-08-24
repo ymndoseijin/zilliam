@@ -7,10 +7,6 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
         pub const Algebra = geo.Algebra(T, dim, 0, 1);
         pub const Blades = blades.Blades(Algebra);
 
-        pub const Plane = Blades[1];
-        pub const Line = Blades[2];
-        pub const Point = Blades[3];
-
         pub fn point(vec: [dim]T) Algebra {
             var temp = Algebra{};
             for (vec, 0..) |val, i| {

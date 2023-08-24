@@ -191,6 +191,52 @@ pub fn Blades(comptime Alg: type) type {
                         return .{ .val = vec + b.toK(K).val };
                     }
 
+                    const HodgeResult = Types[Alg.Indices[Alg.BasisNum - Mask[0]].count];
+
+                    const shuffle_mask = blk: {
+                        const Size = HodgeResult.Count;
+                        var temp: [Size]i32 = .{-1} ** Size;
+                        for (0..Size) |i| {
+                            const idx = Alg.BasisNum - HodgeResult.Mask[i];
+                            temp[i] = MaskTo[idx];
+                        }
+                        break :blk temp;
+                    };
+
+                    pub fn unhodge(a: BladeType) HodgeResult {
+                        const Size = HodgeResult.Count;
+                        const mask = comptime blk: {
+                            var temp: @Vector(Size, Alg.Type) = .{-1} ** Size;
+
+                            for (0..Count) |i| {
+                                const other = Alg.BasisNum - Mask[i];
+                                const res = Alg.memoizedMultiplyBasis(.pos, other, Mask[i]);
+                                const idx = HodgeResult.MaskTo[other];
+                                temp[idx] = res[1];
+                            }
+                            break :blk temp;
+                        };
+
+                        return HodgeResult{ .val = @shuffle(Alg.Type, a.val, a.val, shuffle_mask) * mask };
+                    }
+
+                    pub fn hodge(a: BladeType) HodgeResult {
+                        const Size = HodgeResult.Count;
+                        const mask = comptime blk: {
+                            var temp: @Vector(Size, Alg.Type) = .{-1} ** Size;
+
+                            for (0..Count) |i| {
+                                const other = Alg.BasisNum - Mask[i];
+                                const res = Alg.memoizedMultiplyBasis(.pos, Mask[i], other);
+                                const idx = HodgeResult.MaskTo[other];
+                                temp[idx] = res[1];
+                            }
+                            break :blk temp;
+                        };
+
+                        return HodgeResult{ .val = @shuffle(Alg.Type, a.val, a.val, shuffle_mask) * mask };
+                    }
+
                     pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime a: type, comptime b: type) type {
                         @setEvalBranchQuota(1219541);
 

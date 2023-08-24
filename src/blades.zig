@@ -4,6 +4,10 @@ const std = @import("std");
 pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: usize) type {
     return struct {
         pub const Type = T;
+
+        pub const Mask = T.Mask;
+        pub const MaskTo = T.MaskTo;
+
         pub const LenMul = len_mul;
         pub const Algebra = Alg;
 
@@ -24,18 +28,12 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
             const Result = T.anticommuteResult(quadratic_form, T, @TypeOf(b).Type);
             var vec: [Result.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** (Result.Count);
 
-            const identity = comptime std.simd.iota(i32, Alg.BasisNum + 1);
-
             const b_t = @TypeOf(b);
-
-            const result_mask_to = if (Result == Alg) identity else Result.MaskTo;
-            const t_mask = if (T == Alg) identity else T.Mask;
-            const b_mask = if (b_t.Type == Alg) identity else b_t.Type.Mask;
 
             inline for (0..T.Count) |a_i| {
                 inline for (0..b_t.Type.Count) |b_i| {
-                    const a_idx = comptime t_mask[a_i];
-                    const b_idx = comptime b_mask[b_i];
+                    const a_idx = comptime T.Mask[a_i];
+                    const b_idx = comptime b_t.Mask[b_i];
 
                     if (a_idx != -1 and b_idx != -1) {
                         const res = comptime Alg.memoizedMultiplyBasis(quadratic_form, a_idx, b_idx);
@@ -43,7 +41,7 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
                         const sign: Alg.Type = res[1];
                         const a_us = a.val[a_i];
                         const b_us = b.val[b_i];
-                        const r_idx = result_mask_to[res[0]];
+                        const r_idx = Result.MaskTo[res[0]];
                         if (sign != 0 and r_idx != -1) {
                             const actual_sign: @Vector(LenMul, Alg.Type) = @splat(res[1]);
                             vec[@intCast(r_idx)] += a_us * b_us * actual_sign;
@@ -166,12 +164,12 @@ pub fn Blades(comptime Alg: type) type {
                         return getBatchTypeGen(Alg, BladeType, LenMul);
                     }
 
-                    pub fn toK(a: BladeType, comptime K_res: usize) Types[K_res] {
-                        const result_count = Types[K_res].Count;
+                    pub fn toK(a: BladeType, comptime ResType: type) ResType {
+                        const result_count = ResType.Count;
                         const mask_a_mut = comptime blk: {
                             var temp: [result_count]i32 = .{-1} ** result_count;
                             for (0..Count) |i| {
-                                const mask_loc = Types[K_res].MaskTo[Mask[i]];
+                                const mask_loc = ResType.MaskTo[Mask[i]];
                                 if (mask_loc == -1) @compileError("Invalid K");
                                 temp[@intCast(mask_loc)] = i;
                             }
@@ -183,12 +181,12 @@ pub fn Blades(comptime Alg: type) type {
 
                     pub fn sub(a: BladeType, b: anytype) BladeType {
                         const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec - b.toK(K).val };
+                        return .{ .val = vec - b.toK(Types[K]).val };
                     }
 
                     pub fn add(a: BladeType, b: anytype) BladeType {
                         const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec + b.toK(K).val };
+                        return .{ .val = vec + b.toK(Types[K]).val };
                     }
 
                     const HodgeResult = Types[Alg.Indices[Alg.BasisNum - Mask[0]].count];
@@ -235,6 +233,83 @@ pub fn Blades(comptime Alg: type) type {
                         };
 
                         return HodgeResult{ .val = @shuffle(Alg.Type, a.val, a.val, shuffle_mask) * mask };
+                    }
+
+                    pub fn dual(a: BladeType) HodgeResult {
+                        return hodge(a);
+                    }
+
+                    pub fn undual(a: BladeType) HodgeResult {
+                        return unhodge(a);
+                    }
+
+                    pub fn regressive(a: BladeType, b: BladeType) Wedge(HodgeResult, HodgeResult).HodgeResult {
+                        return a.dual().wedge(b.dual()).undual();
+                    }
+
+                    pub fn grade_involution(a: BladeType) BladeType {
+                        const mask: @Vector(Count, Alg.Type) = comptime blk: {
+                            var temp: [Count]Alg.Type = undefined;
+                            for (&temp, 0..) |*val, i| {
+                                const len = Alg.Indices[Mask[i]].count;
+                                if (len % 2 == 0) {
+                                    val.* = 1;
+                                } else {
+                                    val.* = -1;
+                                }
+                            }
+                            break :blk temp;
+                        };
+
+                        return BladeType{ .val = a.val * mask };
+                    }
+
+                    pub fn reverse(a: BladeType) BladeType {
+                        const mask: @Vector(Count, Alg.Type) = comptime blk: {
+                            var temp: [Count]Alg.Type = undefined;
+                            for (&temp, 0..) |*val, i| {
+                                const len = Alg.Indices[Mask[i]].count;
+                                if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
+                                    val.* = 1;
+                                } else {
+                                    val.* = -1;
+                                }
+                            }
+                            break :blk temp;
+                        };
+
+                        return BladeType{ .val = a.val * mask };
+                    }
+
+                    pub fn grade_projection(a: BladeType, comptime k_in: usize) Types[k_in] {
+                        const ResType = Types[k_in];
+                        const neverweres = ResType{ .val = .{0} ** ResType.Count };
+
+                        if (BladeType == ResType) return a;
+
+                        if (BladeType == Types[Alg.SumDim + 1]) {
+                            var res = ResType{};
+                            const mask: @Vector(ResType.Count, Alg.Type) = comptime blk: {
+                                var temp: [ResType.Count]Alg.Type = undefined;
+                                for (0..ResType.Count) |i| {
+                                    const len = Alg.Indices[ResType.Mask[i]].count;
+                                    if (len == k_in) {
+                                        temp[i] = ResType.MaskTo[ResType.Mask[i]];
+                                    } else {
+                                        temp[i] = -1;
+                                    }
+                                }
+                                break :blk temp;
+                            };
+                            res.val = @shuffle(Alg.Type, a.val, neverweres.val, mask);
+
+                            return res;
+                        }
+                        return neverweres;
+                    }
+
+                    pub fn abs2(a: BladeType) BladeType {
+                        return a.reverse().mul(a).grade_projection(0) catch unreachable;
                     }
 
                     pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime a: type, comptime b: type) type {
@@ -286,11 +361,19 @@ pub fn Blades(comptime Alg: type) type {
                         return Types[candidate];
                     }
 
-                    pub fn mul(a: @This(), b: anytype) anticommuteResult(.pos, @TypeOf(a), @TypeOf(b)) {
+                    fn Mul(comptime a: type, comptime b: type) type {
+                        return anticommuteResult(.pos, a, b);
+                    }
+
+                    fn Wedge(comptime a: type, comptime b: type) type {
+                        return anticommuteResult(.zero, a, b);
+                    }
+
+                    pub fn mul(a: @This(), b: anytype) Mul(@TypeOf(a), @TypeOf(b)) {
                         return anticommute_blade(.pos, a, b);
                     }
 
-                    pub fn wedge(a: @This(), b: anytype) anticommuteResult(.zero, @TypeOf(a), @TypeOf(b)) {
+                    pub fn wedge(a: @This(), b: anytype) Wedge(@TypeOf(a), @TypeOf(b)) {
                         return anticommute_blade(.zero, a, b);
                     }
 
@@ -298,12 +381,6 @@ pub fn Blades(comptime Alg: type) type {
                         const a_t = @TypeOf(a);
                         const b_t = @TypeOf(b);
                         const Result = anticommuteResult(quadratic_form, a_t, b_t);
-
-                        const identity = std.simd.iota(i32, Alg.BasisNum + 1);
-
-                        const result_mask_to = if (Result == Alg) identity else Result.MaskTo;
-                        const result_mask = if (Result == Alg) identity else Result.Mask;
-                        const result_count = if (Result == Alg) Alg.BasisNum + 1 else Result.Count;
 
                         var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
@@ -314,31 +391,31 @@ pub fn Blades(comptime Alg: type) type {
                         };
 
                         const ops = comptime ops_blk: {
-                            var op_a: [op.Res[0].len][result_count]i32 = undefined;
-                            var op_b: [op.Res[0].len][result_count]i32 = undefined;
-                            var op_m: [op.Res[0].len][result_count]Alg.Type = undefined;
+                            var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
+                            var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
+                            var op_m: [op.Res[0].len][Result.Count]Alg.Type = undefined;
                             var op_invalid: [op.Res[0].len]bool = undefined;
 
                             inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
                                 const res = blk: {
-                                    const nothings: @Vector(result_count, i32) = .{-1} ** result_count;
+                                    const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
 
                                     @setEvalBranchQuota(2108350);
-                                    var mask_a_mut: [result_count]i32 = .{-1} ** result_count;
+                                    var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;
                                     for (sel_a, 0..) |to, from| {
-                                        const mask_loc = result_mask_to[from];
+                                        const mask_loc = Result.MaskTo[from];
                                         if (mask_loc == -1 or to == -1) continue;
                                         mask_a_mut[@intCast(mask_loc)] = a_t.MaskTo[to];
                                     }
 
-                                    var mask_b_mut: [result_count]i32 = .{-1} ** result_count;
+                                    var mask_b_mut: [Result.Count]i32 = .{-1} ** Result.Count;
                                     for (sel_b, 0..) |to, from| {
-                                        const mask_loc = result_mask_to[from];
+                                        const mask_loc = Result.MaskTo[from];
                                         if (mask_loc == -1 or to == -1) continue;
                                         mask_b_mut[@intCast(mask_loc)] = b_t.MaskTo[to];
                                     }
 
-                                    var mul_mut: [result_count]Alg.Type = @shuffle(Alg.Type, mult, mult, result_mask);
+                                    var mul_mut: [Result.Count]Alg.Type = @shuffle(Alg.Type, mult, mult, Result.Mask);
                                     for (&mul_mut, 0..) |*val, i| {
                                         if (mask_a_mut[i] == -1 or mask_b_mut[i] == -1) val.* = 0;
                                     }

@@ -35,7 +35,7 @@ fn comptimePower(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
         res.val[0] = 1;
         return res;
     }
-    var a_c = a.toK(repeatType(@TypeOf(a)).K);
+    var a_c = a.toK(repeatType(@TypeOf(a)));
     var loop = a_c;
     inline for (0..i - 1) |_| {
         loop = loop.mul(a_c);
@@ -152,12 +152,17 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
     @setEvalBranchQuota(1219541);
 
+    const identity = comptime std.simd.iota(i32, basis_num + 1);
     return struct {
         val: [basis_num + 1]T = .{0} ** (basis_num + 1),
         const Self = @This();
         pub const Indices = indices;
         pub const BasisNum = basis_num;
+
+        pub const MaskTo = identity;
+        pub const Mask = identity;
         pub const Count = basis_num + 1;
+
         pub const Type = T;
         pub const SumDim = sum_of_dim;
         pub const AlgebraType = AlgebraEnum.FullAlgebra;

@@ -9,11 +9,11 @@ pub const VecSize = 8;
 
 const packed_vec = extern struct { val: [Alg.BasisNum + 1][VecSize]f32 };
 export fn wedge_abi_vec(a: packed_vec, b: packed_vec) packed_vec {
-    return .{ .val = Batch.anticommuteBatch(Batch{ .val = a.val }, .zero, Batch{ .val = b.val }).val };
+    return .{ .val = (Batch{ .val = a.val }).wedge(Batch{ .val = b.val }).val };
 }
 
 export fn mul_abi_vec(a: packed_vec, b: packed_vec) packed_vec {
-    return .{ .val = Batch.anticommuteBatch(Batch{ .val = a.val }, .pos, Batch{ .val = b.val }).val };
+    return .{ .val = (Batch{ .val = a.val }).mul(Batch{ .val = b.val }).val };
 }
 
 pub const Size = 524288 / VecSize;

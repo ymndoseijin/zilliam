@@ -24,8 +24,8 @@ fn factorial(i: anytype) @TypeOf(i) {
 fn repeatType(comptime T: type) type {
     switch (T.AlgebraType) {
         .FullAlgebra => return T,
-        .SubAlgebra => return T.anticommuteResult(.pos, T, T),
-        .BatchAlgebra => return T.getBatchTypeGen(T.Algebra, T.Type.anticommuteResult(.pos, T.Type, T.Type), T.LenMul),
+        .SubAlgebra => return T.anticommuteResult(.pos, void{}, T, T),
+        .BatchAlgebra => return T.getBatchTypeGen(T.Algebra, T.Type.anticommuteResult(.pos, void{}, T.Type, T.Type), T.LenMul),
     }
 }
 
@@ -498,7 +498,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return largest;
         }
 
-        pub fn firstStage(comptime quadratic_form: Sign) type {
+        pub fn getBatchType(comptime LenMul: usize) type {
+            return blades.getBatchTypeGen(Self, Self, LenMul);
+        }
+
+        pub fn anticommuteMemoize(comptime quadratic_form: Sign, comptime filterMat: anytype) type {
             const size = 2048;
 
             @setEvalBranchQuota(1219541);
@@ -511,28 +515,30 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
             for (0..basis_num + 1) |a_i| {
                 for (0..basis_num + 1) |b_i| {
-                    const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
+                    if (@TypeOf(filterMat) == void or filterMat[a_i][b_i] or filterMat[b_i][a_i]) {
+                        const res = comptime memoizedMultiplyBasis(quadratic_form, a_i, b_i);
 
-                    const sign: T = res[1];
+                        const sign: T = res[1];
 
-                    var not_found = true;
+                        var not_found = true;
 
-                    for (multiply_a[0..largest], multiply_b[0..largest], select[0..largest]) |*m_a, *m_b, *sel| {
-                        if (m_a[res[0]] == -1) {
-                            m_a[res[0]] = a_i;
-                            m_b[res[0]] = b_i;
-                            sel[res[0]] = sign;
-                            not_found = false;
-                            break;
+                        for (multiply_a[0..largest], multiply_b[0..largest], select[0..largest]) |*m_a, *m_b, *sel| {
+                            if (m_a[res[0]] == -1) {
+                                m_a[res[0]] = a_i;
+                                m_b[res[0]] = b_i;
+                                sel[res[0]] = sign;
+                                not_found = false;
+                                break;
+                            }
                         }
-                    }
 
-                    if (not_found) {
-                        if (multiply_a[largest][res[0]] != -1) largest += 1;
+                        if (not_found) {
+                            if (multiply_a[largest][res[0]] != -1) largest += 1;
 
-                        multiply_a[largest][res[0]] = a_i;
-                        multiply_b[largest][res[0]] = b_i;
-                        select[largest][res[0]] = sign;
+                            multiply_a[largest][res[0]] = a_i;
+                            multiply_b[largest][res[0]] = b_i;
+                            select[largest][res[0]] = sign;
+                        }
                     }
                 }
             }
@@ -556,37 +562,18 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             };
         }
 
-        pub fn getBatchType(comptime LenMul: usize) type {
-            return blades.getBatchTypeGen(Self, Self, LenMul);
-        }
-
-        pub fn anticommuteMemoize(comptime quadratic_form: Sign) type {
-            const first_stage = firstStage(quadratic_form).Res;
-
-            return struct {
-                pub const Res = first_stage;
-            };
-        }
-
-        pub const posOp = anticommuteMemoize(.pos);
-        pub const negOp = anticommuteMemoize(.neg);
-        pub const zeroOp = anticommuteMemoize(.zero);
-
-        pub fn anticommuteResult(comptime quadratic_form: Sign, comptime a: type, comptime b: type) type {
+        pub fn anticommuteResult(comptime quadratic_form: Sign, comptime filterMat: anytype, comptime a: type, comptime b: type) type {
             _ = quadratic_form;
+            _ = filterMat;
             _ = a;
             _ = b;
             return Self;
         }
 
-        pub fn anticommute(a: Self, comptime quadratic_form: Sign, b: Self) Self {
+        pub fn anticommute(a: Self, comptime quadratic_form: Sign, comptime filterMat: anytype, b: Self) Self {
             var c: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
 
-            const op = switch (quadratic_form) {
-                .pos => posOp,
-                .neg => negOp,
-                .zero => zeroOp,
-            };
+            const op = anticommuteMemoize(quadratic_form, filterMat);
 
             inline for (op.Res[0], op.Res[1], op.Res[2]) |sel_a, sel_b, mult| {
                 var first = @shuffle(T, a.val, a.val, sel_a);
@@ -597,7 +584,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return Self{ .val = c };
         }
 
-        const commonMatrix = blk: {
+        pub const commonMatrix = blk: {
             var temp: [basis_num + 1][basis_num + 1]bool = undefined;
             for (0..basis_num + 1) |i| {
                 for (0..basis_num + 1) |j| {
@@ -626,35 +613,12 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             break :blk temp;
         };
 
-        // TODO: simd
         pub fn inner(a: Self, b: Self) Self {
-            var r: Self = undefined;
-            var vec: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
-            for (a.val, 0..) |a_us, a_i| {
-                if (a_us == 0) continue;
-                for (b.val, 0..) |b_us, b_i| {
-                    if (b_us == 0) continue;
-
-                    if (commonMatrix[a_i][b_i] or commonMatrix[b_i][a_i]) {
-                        const res = .{ posMatrix[0][a_i][b_i], posMatrix[1][a_i][b_i] };
-
-                        const sign: T = res[1];
-                        const a_scalar: T = a_us;
-                        const b_scalar: T = b_us;
-
-                        vec[res[0]] += a_scalar * b_scalar * sign;
-                    } else {
-                        continue;
-                    }
-                }
-            }
-            r.val = vec;
-
-            return r;
+            return a.anticommute(.pos, commonMatrix, b);
         }
 
         pub fn mul(a: Self, b: Self) Self {
-            return a.anticommute(.pos, b);
+            return a.anticommute(.pos, void{}, b);
         }
 
         pub fn regressive(a: Self, b: Self) Self {
@@ -662,7 +626,25 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         pub fn wedge(a: Self, b: Self) Self {
-            return a.anticommute(.zero, b);
+            return a.anticommute(.zero, void{}, b);
+        }
+
+        pub fn Mul(comptime a: type, comptime b: type) type {
+            _ = a;
+            _ = b;
+            return Self;
+        }
+
+        pub fn Wedge(comptime a: type, comptime b: type) type {
+            _ = a;
+            _ = b;
+            return Self;
+        }
+
+        pub fn Inner(comptime a: type, comptime b: type) type {
+            _ = a;
+            _ = b;
+            return Self;
         }
 
         pub fn grade_involution(a: Self) Self {

@@ -23,9 +23,10 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
         pub fn anticommuteBatch(
             a: @This(),
             comptime quadratic_form: geo.Sign,
+            comptime filterMat: anytype,
             b: anytype,
-        ) getBatchTypeGen(Alg, T.anticommuteResult(quadratic_form, T, @TypeOf(b).Type), LenMul) {
-            const Result = T.anticommuteResult(quadratic_form, T, @TypeOf(b).Type);
+        ) getBatchTypeGen(Alg, T.anticommuteResult(quadratic_form, filterMat, T, @TypeOf(b).Type), LenMul) {
+            const Result = T.anticommuteResult(quadratic_form, filterMat, T, @TypeOf(b).Type);
             var vec: [Result.Count]@Vector(LenMul, Alg.Type) = .{.{0} ** LenMul} ** (Result.Count);
 
             const b_t = @TypeOf(b);
@@ -36,15 +37,17 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
                     const b_idx = comptime b_t.Mask[b_i];
 
                     if (a_idx != -1 and b_idx != -1) {
-                        const res = comptime Alg.memoizedMultiplyBasis(quadratic_form, a_idx, b_idx);
+                        if (@TypeOf(filterMat) == void or filterMat[a_idx][b_idx] or filterMat[b_idx][a_idx]) {
+                            const res = comptime Alg.memoizedMultiplyBasis(quadratic_form, a_idx, b_idx);
 
-                        const sign: Alg.Type = res[1];
-                        const a_us = a.val[a_i];
-                        const b_us = b.val[b_i];
-                        const r_idx = Result.MaskTo[res[0]];
-                        if (sign != 0 and r_idx != -1) {
-                            const actual_sign: @Vector(LenMul, Alg.Type) = @splat(res[1]);
-                            vec[@intCast(r_idx)] += a_us * b_us * actual_sign;
+                            const sign: Alg.Type = res[1];
+                            const a_us = a.val[a_i];
+                            const b_us = b.val[b_i];
+                            const r_idx = Result.MaskTo[res[0]];
+                            if (sign != 0 and r_idx != -1) {
+                                const actual_sign: @Vector(LenMul, Alg.Type) = @splat(res[1]);
+                                vec[@intCast(r_idx)] += a_us * b_us * actual_sign;
+                            }
                         }
                     }
                 }
@@ -53,11 +56,15 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
         }
 
         pub fn mul(a: @This(), b: anytype) getBatchTypeGen(Alg, T.Mul(T, @TypeOf(b).Type), LenMul) {
-            return anticommuteBatch(a, .pos, b);
+            return anticommuteBatch(a, .pos, void{}, b);
         }
 
         pub fn wedge(a: @This(), b: anytype) getBatchTypeGen(Alg, T.Wedge(T, @TypeOf(b).Type), LenMul) {
-            return anticommuteBatch(a, .zero, b);
+            return anticommuteBatch(a, .zero, void{}, b);
+        }
+
+        pub fn inner(a: @This(), b: anytype) getBatchTypeGen(Alg, T.Inner(T, @TypeOf(b).Type), LenMul) {
+            return anticommuteBatch(a, .pos, Alg.commonMatrix, b);
         }
 
         pub fn sub(a: @This(), b: anytype) @This() {
@@ -320,14 +327,10 @@ pub fn Blades(comptime Alg: type) type {
                         return a.reverse().mul(a).grade_projection(0) catch unreachable;
                     }
 
-                    pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime a: type, comptime b: type) type {
+                    pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, comptime a: type, comptime b: type) type {
                         @setEvalBranchQuota(1219541);
 
-                        const op = switch (quadratic_form) {
-                            .pos => Alg.posOp,
-                            .neg => Alg.negOp,
-                            .zero => Alg.zeroOp,
-                        };
+                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
 
                         const res = op.Res;
                         var first = true;
@@ -369,34 +372,38 @@ pub fn Blades(comptime Alg: type) type {
                         return Types[candidate];
                     }
 
-                    fn Mul(comptime a: type, comptime b: type) type {
-                        return anticommuteResult(.pos, a, b);
+                    pub fn Mul(comptime a: type, comptime b: type) type {
+                        return anticommuteResult(.pos, void{}, a, b);
                     }
 
-                    fn Wedge(comptime a: type, comptime b: type) type {
-                        return anticommuteResult(.zero, a, b);
+                    pub fn Wedge(comptime a: type, comptime b: type) type {
+                        return anticommuteResult(.zero, void{}, a, b);
+                    }
+
+                    pub fn Inner(comptime a: type, comptime b: type) type {
+                        return anticommuteResult(.pos, Alg.commonMatrix, a, b);
                     }
 
                     pub fn mul(a: @This(), b: anytype) Mul(@TypeOf(a), @TypeOf(b)) {
-                        return anticommute_blade(.pos, a, b);
+                        return anticommute_blade(.pos, void{}, a, b);
                     }
 
                     pub fn wedge(a: @This(), b: anytype) Wedge(@TypeOf(a), @TypeOf(b)) {
-                        return anticommute_blade(.zero, a, b);
+                        return anticommute_blade(.zero, void{}, a, b);
                     }
 
-                    pub fn anticommute_blade(comptime quadratic_form: geo.Sign, a: anytype, b: anytype) anticommuteResult(quadratic_form, @TypeOf(a), @TypeOf(b)) {
+                    pub fn inner(a: @This(), b: anytype) Inner(@TypeOf(a), @TypeOf(b)) {
+                        return anticommute_blade(.pos, Alg.commonMatrix, a, b);
+                    }
+
+                    pub fn anticommute_blade(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, a: anytype, b: anytype) anticommuteResult(quadratic_form, filterMat, @TypeOf(a), @TypeOf(b)) {
                         const a_t = @TypeOf(a);
                         const b_t = @TypeOf(b);
-                        const Result = anticommuteResult(quadratic_form, a_t, b_t);
+                        const Result = anticommuteResult(quadratic_form, filterMat, a_t, b_t);
 
                         var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
-                        const op = switch (quadratic_form) {
-                            .pos => Alg.posOp,
-                            .neg => Alg.negOp,
-                            .zero => Alg.zeroOp,
-                        };
+                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
 
                         const ops = comptime ops_blk: {
                             var op_a: [op.Res[0].len][Result.Count]i32 = undefined;

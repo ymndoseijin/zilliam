@@ -31,13 +31,13 @@ pub fn main() !void {
             b.val[b_i] = .{ 1, 2 };
 
             // This is a Trivector, it gets properly dispatched
-            const res = a.wedge(b);
+            const res = a.inner(b);
 
             for (0..2) |i| {
                 const r_w = res.get(i);
 
                 var r_s = try a.get(i).print(&buf);
-                std.debug.print("{s} ^ ", .{r_s});
+                std.debug.print("{s} | ", .{r_s});
                 r_s = try b.get(i).print(&buf);
                 std.debug.print("{s} = ", .{r_s});
                 r_s = try r_w.print(&buf);

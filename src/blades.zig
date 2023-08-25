@@ -258,7 +258,7 @@ pub fn Blades(comptime Alg: type) type {
                         return unhodge(a);
                     }
 
-                    pub fn regressive(a: BladeType, b: anytype) Wedge(HodgeResult, @TypeOf(b).HodgeResult).HodgeResult {
+                    pub fn regressive(a: BladeType, b: anytype) Regressive(BladeType, @TypeOf(b)) {
                         return a.dual().wedge(b.dual()).undual();
                     }
 
@@ -382,6 +382,10 @@ pub fn Blades(comptime Alg: type) type {
 
                     pub fn Inner(comptime a: type, comptime b: type) type {
                         return anticommuteResult(.pos, Alg.commonMatrix, a, b);
+                    }
+
+                    pub fn Regressive(comptime a: type, comptime b: type) type {
+                        return Wedge(a.HodgeResult, b.HodgeResult).HodgeResult;
                     }
 
                     pub fn mul(a: @This(), b: anytype) Mul(@TypeOf(a), @TypeOf(b)) {

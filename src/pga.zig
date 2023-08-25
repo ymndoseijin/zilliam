@@ -9,23 +9,39 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
 
         pub const Types = blk: {
             var temp_types: [dim]type = undefined;
+            const types_ptr = &temp_types;
             for (&temp_types, 0..) |*current_type, t_i| {
                 current_type.* = struct {
-                    const Type = Blades[t_i + 1].HodgeResult;
-                    val: Type,
+                    const Type = if (t_i == dim - 1) Blades[1].HodgeResult else Blades[t_i + 1];
+                    const ReturnVec = if (t_i == dim - 1) [Type.Count - 1]T else [Type.Count]T;
 
-                    pub fn create(vec: [Type.Count - 1]T) @This() {
-                        var temp = Blades[t_i + 1]{};
-                        for (0..Blades[t_i + 1].Count - 1) |i| {
+                    const ShapeTypes = types_ptr;
+
+                    const Self = @This();
+
+                    pub fn create(vec: ReturnVec) Type {
+                        if (t_i != dim - 1) return .{ .val = vec };
+
+                        var temp = Blades[1]{};
+                        for (0..dim) |i| {
                             temp.val[i + 1] = vec[i];
                         }
                         temp.val[0] = 1;
-                        return .{ .val = temp.hodge() };
+                        return temp.hodge();
                     }
 
-                    pub fn get(a: @This()) [Type.Count - 1]T {
-                        var val = normalize(a.val).dual();
-                        var temp: [Type.Count - 1]T = undefined;
+                    pub fn get(a: Type) ReturnVec {
+                        if (t_i != dim - 1) {
+                            var val = normalize(a);
+                            var temp: ReturnVec = undefined;
+                            for (&temp, val.val[1..]) |*t, v| {
+                                t.* = v;
+                            }
+                            return temp;
+                        }
+
+                        var val = normalize(a).dual();
+                        var temp: ReturnVec = undefined;
                         for (&temp, val.val[1..]) |*t, v| {
                             t.* = v;
                         }
@@ -36,31 +52,15 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
             break :blk temp_types;
         };
 
-        pub const Point = Blades[1].HodgeResult;
-        pub const Line = Blades[2].HodgeResult;
-
-        pub fn point(vec: [dim]T) Point {
-            var temp = Blades[1]{};
-            for (0..dim) |i| {
-                temp.val[i + 1] = vec[i];
-            }
-            temp.set(.e0, 1);
-            return temp.hodge();
-        }
+        pub const Point = if (dim >= 1) Types[dim - 1] else void;
+        pub const Line = if (dim >= 2) Types[dim - 2] else void;
+        pub const Plane = if (dim >= 3) Types[dim - 3] else void;
+        pub const Cube = if (dim >= 4) Types[dim - 4] else void;
 
         pub fn normalize(a: anytype) @TypeOf(a) {
             const U = @TypeOf(a);
             var coeff: @Vector(U.Count, T) = @splat(a.val[U.Count - 1]);
             return U{ .val = a.val / coeff };
-        }
-
-        pub fn getPoint(a: Point) [dim]T {
-            var val = normalize(a).dual();
-            var temp: [dim]T = undefined;
-            for (&temp, val.val[1..]) |*t, v| {
-                t.* = v;
-            }
-            return temp;
         }
     };
 }
@@ -68,10 +68,14 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
 test "2D PGA" {
     const Pga = PGA(f32, 2);
 
-    inline for (0..2) |i| {
-        const AType = Pga.Types[i];
-        //std.debug.print("\n{any}\n", .{Pga.getPoint(D)});
-        std.debug.print("\n{any}: {}\n", .{ AType.Type, AType.Type.K });
-        //std.debug.print("\n{any}\n", .{Pga.Line.K});
-    }
+    const Point = Pga.Point;
+    const A = Point.create(.{ -1, -1 });
+    const C = Point.create(.{ 1, 1 });
+
+    const L = Point.create(.{ 0, 0.5 }).regressive(Point.create(.{ 1, -0.5 }));
+
+    const AC = A.regressive(C);
+    const D = L.wedge(AC);
+
+    std.debug.print("\n{any}\n", .{Point.get(D)});
 }

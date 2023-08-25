@@ -27,7 +27,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                             temp.val[i + 1] = vec[i];
                         }
                         temp.val[0] = 1;
-                        return temp.hodge();
+                        return temp.dual();
                     }
 
                     pub fn get(a: Type) ReturnVec {
@@ -40,7 +40,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                             return temp;
                         }
 
-                        var val = normalize(a).dual();
+                        var val = normalize(a).undual();
                         var temp: ReturnVec = undefined;
                         for (&temp, val.val[1..]) |*t, v| {
                             t.* = v;
@@ -77,5 +77,21 @@ test "2D PGA" {
     const AC = A.regressive(C);
     const D = L.wedge(AC);
 
-    std.debug.print("\n{any}\n", .{Point.get(D)});
+    try std.testing.expectEqualSlices(f32, &.{ 0.25, 0.25 }, &Point.get(D));
+}
+
+test "3D PGA" {
+    const Pga = PGA(f32, 3);
+
+    const Point = Pga.Point;
+    const A = Point.create(.{ -1, -1, -1 });
+    const C = Point.create(.{ 1, 1, 1 });
+
+    const z = 1.0;
+    const L = Point.create(.{ 0, 0, z }).regressive(Point.create(.{ 1, 0, z })).regressive(Point.create(.{ 0, 1, z }));
+
+    const AC = A.regressive(C);
+    const D = L.wedge(AC);
+
+    try std.testing.expectEqualSlices(f32, &.{ 1.0, 1.0, 1.0 }, &Point.get(D));
 }

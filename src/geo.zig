@@ -994,30 +994,23 @@ test "algebra" {
     try std.testing.expectEqual(set_test.get(.e023), 666);
 }
 
-test "comath dual test" {
+test "dual numbers" {
     // function we want derivatives of
-    const fn_str = "(x + off1) * (x + off2)";
     const Alg = Algebra(i32, 0, 0, 1);
 
-    // evaluate as floats
-    {
-        const value = Alg.eval(fn_str, .{ .x = 3, .off1 = 2, .off2 = 1 }) catch |err| switch (err) {};
+    const fn_str = "(x + off1) * (x + off2)";
 
-        try std.testing.expect(value.val[0] == 20);
-        try std.testing.expect(value.val[1] == 0);
-    }
+    // evaluate regular function
+    try std.testing.expectEqualSlices(
+        i32,
+        &.{ 20, 0 },
+        &(try Alg.eval(fn_str, .{ .x = 3, .off1 = 2, .off2 = 1 })).val,
+    );
 
-    // evaluate as duals
-    {
-        const value_dual = Alg.eval(fn_str, .{
-            .x = try Alg.eval("3+e0", .{}),
-            .off1 = 2,
-            .off2 = 1,
-        }) catch |err| switch (err) {};
-
-        // the value of f at x = 3
-        try std.testing.expectEqual(@as(i32, 20), value_dual.val[0]);
-        // the derivative of f at x = 3
-        try std.testing.expectEqual(@as(i32, 9), value_dual.val[1]);
-    }
+    // evaluate derivative
+    try std.testing.expectEqualSlices(
+        i32,
+        &.{ 20, 9 },
+        &(try Alg.eval(fn_str, .{ .x = try Alg.eval("3+e0", .{}), .off1 = 2, .off2 = 1 })).val,
+    );
 }

@@ -50,6 +50,12 @@ pub fn isAt(vals: anytype, s_row: anytype, row_i: anytype, search_positive: anyt
 }
 
 pub fn simplify(vals: anytype) void {
+    simplifyZeroes(vals);
+    simplifySwap(vals);
+    simplifyZeroes(vals);
+}
+
+pub fn simplifySwap(vals: anytype) void {
     comptime {
         var op_a = vals[0];
         var op_b = vals[1];
@@ -83,6 +89,42 @@ pub fn simplify(vals: anytype) void {
                         op_m[i][elem_i] = m;
                     }
                 }
+            }
+        }
+    }
+}
+
+pub fn runOps(comptime vals: anytype, a: anytype, b: anytype, c: anytype) void {
+    const op_a = vals[0];
+    const op_b = vals[1];
+    const op_m = vals[2];
+    const len = op_a[0].len;
+
+    const nothings: @Vector(len, i32) = .{-1} ** len;
+    const Type = @TypeOf(a.val[0]);
+    inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
+        const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings);
+        const mask_m_count = comptime blk: {
+            var count: usize = 0;
+            for (mask_m) |v| {
+                if (v == 0) count += 1;
+            }
+            break :blk count;
+        };
+
+        const positives: @Vector(len, Type) = .{1} ** len;
+        const negatives: @Vector(len, Type) = .{-1} ** len;
+
+        if (!invalid and (mask_m_count != len)) {
+            var first = @shuffle(Type, a.val, a.val, mask_a);
+            var second = @shuffle(Type, b.val, b.val, mask_b);
+
+            if (comptime @reduce(.And, mask_m == positives)) {
+                c.* += first * second;
+            } else if (comptime @reduce(.And, mask_m == negatives)) {
+                c.* -= first * second;
+            } else {
+                c.* += first * second * mask_m;
             }
         }
     }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const comath = @import("comath");
+const operations = @import("operations.zig");
 const blades = @import("blades.zig");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
@@ -555,6 +556,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             @memcpy(&res_mut[1], multiply_b[0 .. largest + 1]);
             @memcpy(&res_mut[2], select[0 .. largest + 1]);
 
+            operations.simplify(&.{ &res_mut[0], &res_mut[1], &res_mut[2] });
+
             const res = res_mut;
 
             return struct {
@@ -575,11 +578,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
             const op = anticommuteMemoize(quadratic_form, filterMat);
 
-            inline for (op.Res[0], op.Res[1], op.Res[2]) |sel_a, sel_b, mult| {
-                var first = @shuffle(T, a.val, a.val, sel_a);
-                var second = @shuffle(T, b.val, b.val, sel_b);
-                c += first * second * mult;
-            }
+            operations.runOps(op.Res, a, b, &c);
 
             return Self{ .val = c };
         }

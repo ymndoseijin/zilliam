@@ -409,7 +409,6 @@ pub fn Blades(comptime Alg: type) type {
                         var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
                         const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
-                        const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
 
                         const ops = comptime ops_blk: {
                             var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
@@ -446,45 +445,13 @@ pub fn Blades(comptime Alg: type) type {
                                 op_m[op_i] = res[2];
                             }
 
-                            operations.simplifyZeroes(&.{ &op_a, &op_b, &op_m });
-
                             operations.simplify(&.{ &op_a, &op_b, &op_m });
-
-                            operations.simplifyZeroes(&.{ &op_a, &op_b, &op_m });
 
                             break :ops_blk .{ op_a, op_b, op_m };
                         };
 
-                        const op_a = ops[0];
-                        const op_b = ops[1];
-                        const op_m = ops[2];
+                        operations.runOps(ops, a, b, &c);
 
-                        inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
-                            const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings);
-                            const mask_m_count = comptime blk: {
-                                var count: usize = 0;
-                                for (mask_m) |v| {
-                                    if (v == 0) count += 1;
-                                }
-                                break :blk count;
-                            };
-
-                            const positives: @Vector(Result.Count, Alg.Type) = .{1} ** Result.Count;
-                            const negatives: @Vector(Result.Count, Alg.Type) = .{-1} ** Result.Count;
-
-                            if (!invalid and (mask_m_count != Result.Count)) {
-                                var first = @shuffle(Alg.Type, a.val, a.val, mask_a);
-                                var second = @shuffle(Alg.Type, b.val, b.val, mask_b);
-
-                                if (comptime @reduce(.And, mask_m == positives)) {
-                                    c += first * second;
-                                } else if (comptime @reduce(.And, mask_m == negatives)) {
-                                    c -= first * second;
-                                } else {
-                                    c += first * second * mask_m;
-                                }
-                            }
-                        }
                         return Result{ .val = c };
                     }
                 };

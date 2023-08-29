@@ -1,5 +1,6 @@
 const geo = @import("geo.zig");
 const std = @import("std");
+const operations = @import("operations.zig");
 
 pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: usize) type {
     return struct {
@@ -408,17 +409,15 @@ pub fn Blades(comptime Alg: type) type {
                         var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
                         const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
+                        const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
 
                         const ops = comptime ops_blk: {
                             var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
                             var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
                             var op_m: [op.Res[0].len][Result.Count]Alg.Type = undefined;
-                            var op_invalid: [op.Res[0].len]bool = undefined;
 
                             inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
                                 const res = blk: {
-                                    const nothings: @Vector(Result.Count, i32) = .{-1} ** Result.Count;
-
                                     @setEvalBranchQuota(2108350);
                                     var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;
                                     for (sel_a, 0..) |to, from| {
@@ -439,44 +438,29 @@ pub fn Blades(comptime Alg: type) type {
                                         if (mask_a_mut[i] == -1 or mask_b_mut[i] == -1) val.* = 0;
                                     }
 
-                                    break :blk .{ @reduce(.And, mask_a_mut == nothings) or @reduce(.And, mask_b_mut == nothings), mask_a_mut, mask_b_mut, mul_mut };
+                                    break :blk .{ mask_a_mut, mask_b_mut, mul_mut };
                                 };
 
-                                op_a[op_i] = res[1];
-                                op_b[op_i] = res[2];
-                                op_m[op_i] = res[3];
-                                op_invalid[op_i] = res[0];
+                                op_a[op_i] = res[0];
+                                op_b[op_i] = res[1];
+                                op_m[op_i] = res[2];
                             }
 
-                            for (op_a, op_b, op_m, 0..) |a_row, b_row, s_row, row_i| {
-                                for (a_row, b_row, s_row, 0..) |a_elem, b_elem, s_elem, elem_i| {
-                                    if (s_elem != 0 and !op_invalid[row_i]) {
-                                        for (0..row_i) |rep_i| {
-                                            const s_rep = op_m[rep_i][elem_i];
-                                            if (op_invalid[rep_i]) continue;
+                            operations.simplifyZeroes(&.{ &op_a, &op_b, &op_m });
 
-                                            if (s_rep == 0) {
-                                                op_m[rep_i][elem_i] = s_elem;
-                                                op_a[rep_i][elem_i] = a_elem;
-                                                op_b[rep_i][elem_i] = b_elem;
-                                                op_m[row_i][elem_i] = 0;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            operations.simplify(&.{ &op_a, &op_b, &op_m });
 
-                            break :ops_blk .{ op_a, op_b, op_m, op_invalid };
+                            operations.simplifyZeroes(&.{ &op_a, &op_b, &op_m });
+
+                            break :ops_blk .{ op_a, op_b, op_m };
                         };
 
                         const op_a = ops[0];
                         const op_b = ops[1];
                         const op_m = ops[2];
-                        const op_invalid = ops[3];
 
-                        inline for (op_a, op_b, op_m, op_invalid) |mask_a, mask_b, mask_m, invalid| {
-                            //const neverweres: @Vector(Result.Count, T) = .{0} ** Result.Count;
+                        inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
+                            const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings);
                             const mask_m_count = comptime blk: {
                                 var count: usize = 0;
                                 for (mask_m) |v| {
@@ -484,13 +468,23 @@ pub fn Blades(comptime Alg: type) type {
                                 }
                                 break :blk count;
                             };
-                            if (invalid == false and (mask_m_count != Result.Count)) {
+
+                            const positives: @Vector(Result.Count, Alg.Type) = .{1} ** Result.Count;
+                            const negatives: @Vector(Result.Count, Alg.Type) = .{-1} ** Result.Count;
+
+                            if (!invalid and (mask_m_count != Result.Count)) {
                                 var first = @shuffle(Alg.Type, a.val, a.val, mask_a);
                                 var second = @shuffle(Alg.Type, b.val, b.val, mask_b);
-                                c += first * second * mask_m;
+
+                                if (comptime @reduce(.And, mask_m == positives)) {
+                                    c += first * second;
+                                } else if (comptime @reduce(.And, mask_m == negatives)) {
+                                    c -= first * second;
+                                } else {
+                                    c += first * second * mask_m;
+                                }
                             }
                         }
-
                         return Result{ .val = c };
                     }
                 };

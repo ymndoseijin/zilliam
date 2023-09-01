@@ -5,7 +5,31 @@ const std = @import("std");
 pub fn PGA(comptime T: type, comptime dim: usize) type {
     return struct {
         pub const Algebra = geo.Algebra(T, dim, 0, 1);
-        pub const Blades = blades.Blades(Algebra).Types;
+
+        const branch = blk: {
+            var len = 0;
+            var branch_arr: [len]usize = undefined;
+            var count = 0;
+            for (Algebra.Indices, 0..) |data, i| {
+                if (data.count == dim - 1) {
+                    const is_valid = valid: {
+                        for (data.tags[0..data.count]) |tag| {
+                            if (tag == 1) break :valid false;
+                        }
+                        break :valid true;
+                    };
+                    if (is_valid) {
+                        branch_arr[count] = i;
+                        count += 1;
+                    }
+                }
+            }
+            break :blk branch_arr;
+        };
+
+        const extra_blades = 2;
+
+        pub const Blades = blades.Blades(Algebra, .{ branch, .{ 5, 6, 7 } }).Types;
 
         pub const Types = blk: {
             var temp_types: [dim]type = undefined;
@@ -93,5 +117,13 @@ test "3D PGA" {
     const AC = A.regressive(C);
     const D = L.wedge(AC);
 
+    const O = Point.create(.{ 0, 0, 0 });
+
     try std.testing.expectEqualSlices(f32, &.{ 1.0, 1.0, 1.0 }, &Point.get(D));
+    var buf: [2048]u8 = undefined;
+    std.debug.print("\n{s}\n", .{try L.print(&buf)});
+    std.debug.print("\n{s}\n", .{try A.print(&buf)});
+    std.debug.print("\n{s}\n", .{try L.wedge(A).print(&buf)});
+    std.debug.print("\nOC: {any}\n", .{O.regressive(C)});
+    std.debug.print("\n{d}\n", .{(try Pga.Algebra.eval("e01+e02+e03", .{})).val});
 }

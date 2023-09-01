@@ -470,11 +470,11 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
     };
 }
 
-pub fn Blades(comptime Alg: type) type {
-    var buff: [Alg.SumDim + 2][Alg.BasisNum + 1]usize = undefined;
+pub fn Blades(comptime Alg: type, comptime format: anytype) type {
+    var buff: [Alg.SumDim + 2 + format.len][Alg.BasisNum + 1]usize = undefined;
 
     // I can't use slices for some reason here, so
-    var masks: [Alg.SumDim + 2]usize = undefined;
+    var masks: [Alg.SumDim + 2 + format.len]usize = undefined;
 
     for (0..Alg.SumDim + 1) |i| {
         var count = 0;
@@ -486,23 +486,22 @@ pub fn Blades(comptime Alg: type) type {
         }
         masks[i] = count;
     }
-    var count = 0;
-    for (Alg.Indices, 0..) |data, j| {
-        if (data.count % 2 == 0) {
-            buff[Alg.SumDim + 1][count] = j;
-            count += 1;
+
+    {
+        var count = 0;
+        for (Alg.Indices, 0..) |data, j| {
+            if (data.count % 2 == 0) {
+                buff[Alg.SumDim + 1][count] = j;
+                count += 1;
+            }
         }
+        masks[Alg.SumDim + 1] = count;
     }
-    masks[Alg.SumDim + 1] = count;
+
+    for (format, 0..) |fmt, i| {
+        for (buff[Alg.SumDim + 2 + i][0..fmt.len], fmt) |*e, fmt_elem| e.* = fmt_elem;
+        masks[Alg.SumDim + 2 + i] = fmt.len;
+    }
 
     return BladesBare(Alg, buff, masks);
-}
-
-test "dual numbers" {
-    const Alg = geo.Algebra(i32, 3, 0, 0);
-
-    const actual_blades = Blades(Alg).Types;
-    inline for (actual_blades) |BL| {
-        std.debug.print("\n{any}\n", .{BL.Mask});
-    }
 }

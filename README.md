@@ -80,7 +80,6 @@ pub fn main() !void {
 ```
 
 # Todo
-- Improve SIMD generation, right now it always multiplies the shuffled vectors with their sign and then adds, ideally it would swap out the order of operations and then choose to add, subtract or in the fallback case multiply.
 - Improve utils to generate a type for dealing wtih each flavor of geometric algebra (so PGA would have functions to generate lines, planes, etc).
 - Eventually, hook it up to my graphics library to start doing visualizations (maybe something on par with ganja.js)
 

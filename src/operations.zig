@@ -106,6 +106,8 @@ pub fn runOps(comptime vals: anytype, a: anytype, b: anytype, c: anytype) void {
         const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings);
         const mask_m_count = comptime blk: {
             var count: usize = 0;
+            @setEvalBranchQuota(1219541);
+
             for (mask_m) |v| {
                 if (v == 0) count += 1;
             }

@@ -36,7 +36,7 @@ fn comptimePower(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
         res.val[0] = 1;
         return res;
     }
-    var a_c = a.toK(repeatType(@TypeOf(a)));
+    var a_c = a.toIndex(repeatType(@TypeOf(a)));
     var loop = a_c;
     inline for (0..i - 1) |_| {
         loop = loop.mul(a_c);
@@ -167,6 +167,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub const Type = T;
         pub const SumDim = sum_of_dim;
         pub const AlgebraType = AlgebraEnum.FullAlgebra;
+
+        pub const HodgeResult = Self;
+        pub const Algebra = Self;
 
         pub fn getBladeCount(comptime k: usize) usize {
             var total: usize = 0;

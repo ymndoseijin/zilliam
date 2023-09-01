@@ -86,63 +86,35 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
     };
 }
 
-pub fn Blades(comptime Alg: type) type {
+pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime sizes: anytype) type {
     const types = type_blk: {
-        var res_types: [Alg.SumDim + 2]type = undefined;
+        var res_types: [format_buff.len]type = undefined;
         const res_ptr = &res_types;
-        inline for (0..Alg.SumDim + 2) |k| {
+        inline for (format_buff, sizes, 0..) |buff, size, fmt_index| {
+            const fmt = buff[0..size];
             const it = blk: {
-                const blade_count = if (k < Alg.SumDim + 1) comptime Alg.getBladeCount(k) else count_blk: {
-                    var temp: usize = 0;
-                    for (Alg.Indices) |data| {
-                        if (data.count % 2 == 0) temp += 1;
-                    }
-                    break :count_blk temp;
-                };
+                const blade_count = fmt.len;
 
-                const blade_mask = if (k < Alg.SumDim + 1) mask_blk: {
+                const blade_mask = mask_blk: {
                     var temp: [blade_count]i32 = undefined;
 
-                    var index: usize = 0;
-                    for (Alg.Indices, 0..) |data, i| {
-                        if (data.count == k) {
-                            temp[index] = i;
-                            index += 1;
-                        }
-                    }
-                    break :mask_blk temp;
-                } else mask_blk: {
-                    var temp: [blade_count]i32 = undefined;
-
-                    var index: usize = 0;
-                    for (Alg.Indices, 0..) |data, i| {
-                        if (data.count % 2 == 0) {
-                            temp[index] = i;
-                            index += 1;
-                        }
+                    for (fmt, 0..) |data, i| {
+                        temp[i] = data;
                     }
                     break :mask_blk temp;
                 };
 
-                const blade_mask_to = if (k < Alg.SumDim + 1) mask_blk: {
+                const blade_mask_to = mask_blk: {
                     var temp: [Alg.BasisNum + 1]i32 = .{-1} ** (Alg.BasisNum + 1);
 
                     var index: usize = 0;
-                    for (Alg.Indices, 0..) |data, i| {
-                        if (data.count == k) {
-                            temp[i] = index;
-                            index += 1;
-                        }
-                    }
-                    break :mask_blk temp;
-                } else mask_blk: {
-                    var temp: [Alg.BasisNum + 1]i32 = .{-1} ** (Alg.BasisNum + 1);
-
-                    var index: usize = 0;
-                    for (Alg.Indices, 0..) |data, i| {
-                        if (data.count % 2 == 0) {
-                            temp[i] = index;
-                            index += 1;
+                    for (0..Alg.BasisNum + 1) |i| {
+                        for (fmt) |k| {
+                            if (i == k) {
+                                temp[i] = index;
+                                index += 1;
+                                break;
+                            }
                         }
                     }
                     break :mask_blk temp;
@@ -152,7 +124,9 @@ pub fn Blades(comptime Alg: type) type {
                     pub const Mask = blade_mask;
                     pub const MaskTo = blade_mask_to;
                     pub const Count = blade_count;
-                    pub const K = k;
+
+                    pub const Idx = fmt_index;
+
                     pub const Types = res_ptr;
                     pub const Identity: BladeType = .{ .val = .{1} ** Count };
                     pub const Algebra = Alg;
@@ -172,7 +146,7 @@ pub fn Blades(comptime Alg: type) type {
                         return getBatchTypeGen(Alg, BladeType, LenMul);
                     }
 
-                    pub fn toK(a: BladeType, comptime ResType: type) ResType {
+                    pub fn toIndex(a: BladeType, comptime ResType: type) ResType {
                         const result_count = ResType.Count;
                         const mask_a_mut = comptime blk: {
                             var temp: [result_count]i32 = .{-1} ** result_count;
@@ -189,12 +163,12 @@ pub fn Blades(comptime Alg: type) type {
 
                     pub fn sub(a: BladeType, b: anytype) BladeType {
                         const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec - b.toK(Types[K]).val };
+                        return .{ .val = vec - b.toIndex(Types[Idx]).val };
                     }
 
                     pub fn add(a: BladeType, b: anytype) BladeType {
                         const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec + b.toK(Types[K]).val };
+                        return .{ .val = vec + b.toIndex(Types[Idx]).val };
                     }
 
                     pub fn get(a: BladeType, blade: Alg.BladeEnum) Alg.Type {
@@ -334,43 +308,72 @@ pub fn Blades(comptime Alg: type) type {
                         const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
 
                         const res = op.Res;
-                        var first = true;
-                        var candidate: usize = 0;
+
+                        var basis: [Alg.BasisNum * 20]usize = undefined;
+                        var basis_count: usize = 0;
+
+                        var candidate: type = void;
 
                         if (b.AlgebraType == .FullAlgebra) return b;
 
-                        const a_k = a.K;
-                        const b_k = b.K;
-
-                        // even
-                        if (a_k == Alg.SumDim + 1 or b_k == Alg.SumDim + 1) return Types[Types.len - 1];
-
                         for (res[0], res[1]) |sel_a, sel_b| {
-                            for (sel_a, sel_b, 0..) |val_a, val_b, i| {
+                            top_loop: for (sel_a, sel_b, 0..) |val_a, val_b, i| {
                                 if (val_a == -1 or val_b == -1) continue;
-                                const k_1 = Alg.Indices[val_a].count;
-                                const k_2 = Alg.Indices[val_b].count;
-                                if ((k_1 == a_k and k_2 == b_k) or
-                                    (k_1 == b_k and k_2 == a_k))
-                                {
-                                    const op_sign = comptime Alg.memoizedMultiplyBasis(quadratic_form, val_a, val_b)[1];
-                                    if (first and op_sign != 0) {
-                                        candidate = Alg.Indices[i].count;
-                                        first = false;
-                                    } else if (Alg.Indices[i].count != candidate and op_sign != 0) {
-                                        if ((candidate % 2 == 0 and Alg.Indices[i].count % 2 == 0) or
-                                            (candidate == Types.len - 1))
-                                        {
-                                            candidate = Types.len - 1;
-                                            continue;
-                                        }
-                                        return Alg;
+
+                                var cond = false;
+                                for (a.Mask) |mask_val| {
+                                    if (mask_val == val_a) {
+                                        cond = true;
+                                        break;
                                     }
+                                }
+
+                                if (!cond) continue;
+
+                                cond = false;
+                                for (b.Mask) |mask_val| {
+                                    if (mask_val == val_b) {
+                                        cond = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!cond) continue;
+
+                                const op_sign = comptime Alg.memoizedMultiplyBasis(quadratic_form, val_a, val_b)[1];
+                                if (op_sign != 0) {
+                                    basis[basis_count] = i;
+                                    basis_count += 1;
+                                    for (Types) |type_search| {
+                                        var found_all = blk: {
+                                            for (basis[0..basis_count]) |basis_val| {
+                                                var found_basis = false;
+                                                for (type_search.Mask) |type_val| {
+                                                    if (type_val == basis_val) {
+                                                        found_basis = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if (!found_basis) {
+                                                    break :blk false;
+                                                }
+                                            }
+                                            break :blk true;
+                                        };
+                                        if (found_all) {
+                                            candidate = type_search;
+                                            continue :top_loop;
+                                        }
+                                    }
+                                    return Alg;
                                 }
                             }
                         }
 
-                        return Types[candidate];
+                        // ????
+                        if (candidate == void) return Alg;
+
+                        return candidate;
                     }
 
                     pub fn Mul(comptime a: type, comptime b: type) type {
@@ -456,7 +459,7 @@ pub fn Blades(comptime Alg: type) type {
                     }
                 };
             };
-            res_types[k] = it;
+            res_types[fmt_index] = it;
         }
 
         break :type_blk res_types;
@@ -465,4 +468,41 @@ pub fn Blades(comptime Alg: type) type {
     return struct {
         pub const Types = types;
     };
+}
+
+pub fn Blades(comptime Alg: type) type {
+    var buff: [Alg.SumDim + 2][Alg.BasisNum + 1]usize = undefined;
+
+    // I can't use slices for some reason here, so
+    var masks: [Alg.SumDim + 2]usize = undefined;
+
+    for (0..Alg.SumDim + 1) |i| {
+        var count = 0;
+        for (Alg.Indices, 0..) |data, j| {
+            if (data.count == i) {
+                buff[i][count] = j;
+                count += 1;
+            }
+        }
+        masks[i] = count;
+    }
+    var count = 0;
+    for (Alg.Indices, 0..) |data, j| {
+        if (data.count % 2 == 0) {
+            buff[Alg.SumDim + 1][count] = j;
+            count += 1;
+        }
+    }
+    masks[Alg.SumDim + 1] = count;
+
+    return BladesBare(Alg, buff, masks);
+}
+
+test "dual numbers" {
+    const Alg = geo.Algebra(i32, 3, 0, 0);
+
+    const actual_blades = Blades(Alg).Types;
+    inline for (actual_blades) |BL| {
+        std.debug.print("\n{any}\n", .{BL.Mask});
+    }
 }

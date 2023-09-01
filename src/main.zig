@@ -54,7 +54,7 @@ pub fn main() !void {
                 std.debug.print("involution: {s}\n", .{r_s});
 
                 r_s = try b.get(i).hodge().print(&buf);
-                std.debug.print("hodge: {s} {}\n", .{ r_s, @TypeOf(b.get(i).hodge()).K });
+                std.debug.print("hodge: {s} {any}\n", .{ r_s, @TypeOf(b.get(i).hodge()) });
             }
 
             std.debug.print("\n", .{});

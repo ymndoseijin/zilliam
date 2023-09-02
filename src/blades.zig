@@ -132,6 +132,18 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                     pub const Algebra = Alg;
                     pub const AlgebraType = geo.AlgebraEnum.SubAlgebra;
 
+                    pub const MultiMask = blk: {
+                        var temp: [Alg.Count]i32 = undefined;
+                        for (&temp, 0..) |*m, i| {
+                            if (MaskTo[i] != -1) {
+                                m.* = i;
+                            } else {
+                                m.* = -1;
+                            }
+                        }
+                        break :blk temp;
+                    };
+
                     val: [Count]Alg.Type = .{0} ** Count,
 
                     const BladeType = @This();
@@ -161,14 +173,42 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                         return .{ .val = @shuffle(Alg.Type, a.val, neverweres, mask_a_mut) };
                     }
 
-                    pub fn sub(a: BladeType, b: anytype) BladeType {
-                        const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec - b.toIndex(Types[Idx]).val };
+                    pub fn sub(a: BladeType, b: anytype) mergeResult(@TypeOf(b)) {
+                        const b_t = @TypeOf(b);
+                        const Result = mergeResult(b_t);
+
+                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toIndex(Result).val) - b.toIndex(Result).val };
                     }
 
-                    pub fn add(a: BladeType, b: anytype) BladeType {
-                        const vec: @Vector(Count, Alg.Type) = a.val;
-                        return .{ .val = vec + b.toIndex(Types[Idx]).val };
+                    fn mergeResult(comptime b_t: type) type {
+                        var a_mut: [Alg.Count]Alg.Type = .{0} ** Alg.Count;
+                        for (&a_mut, 0..) |*a, i| {
+                            if (MaskTo[i] != -1) a.* = 1;
+                        }
+
+                        var b_mut: [Alg.Count]Alg.Type = .{0} ** Alg.Count;
+                        for (&b_mut, 0..) |*b, i| {
+                            if (b_t.MaskTo[i] != -1) b.* = 1;
+                        }
+
+                        const a_id = a_mut;
+                        const b_id = b_mut;
+
+                        const Type = struct {
+                            pub const Res = .{
+                                .{ MultiMask, .{Mask[0]} ** Alg.Count },
+                                .{ .{b_t.Mask[0]} ** Alg.Count, b_t.MultiMask },
+                                .{ a_id, b_id },
+                            };
+                        };
+                        return binaryOperationsResult(Type, BladeType, b_t);
+                    }
+
+                    pub fn add(a: BladeType, b: anytype) mergeResult(@TypeOf(b)) {
+                        const b_t = @TypeOf(b);
+                        const Result = mergeResult(b_t);
+
+                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toIndex(Result).val) + b.toIndex(Result).val };
                     }
 
                     pub fn get(a: BladeType, blade: Alg.BladeEnum) Alg.Type {
@@ -179,7 +219,79 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                         a.val[@intCast(MaskTo[@intFromEnum(blade) + 1])] = val;
                     }
 
-                    pub const HodgeResult = Types[Alg.Indices[Alg.BasisNum - Mask[0]].count];
+                    pub const zero_blade: @Vector(BladeType.Count, Alg.Type) = .{0} ** BladeType.Count;
+
+                    pub fn unaryOperationResult(comptime op: anytype, comptime a: type) type {
+                        const res = op.Res;
+
+                        var basis: [Alg.BasisNum * 20]usize = undefined;
+                        var basis_count: usize = 0;
+
+                        var candidate: type = void;
+
+                        if (a.AlgebraType == .FullAlgebra) return a;
+
+                        for (res[0], res[1]) |sel_a, sel_m| {
+                            for (sel_a, sel_m, 0..) |val_a, op_sign, i| {
+                                if (val_a == -1) continue;
+
+                                var cond = false;
+                                for (a.Mask) |mask_val| {
+                                    if (mask_val == val_a) {
+                                        cond = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!cond) continue;
+
+                                if (op_sign != 0) {
+                                    basis[basis_count] = i;
+                                    basis_count += 1;
+                                    var current_candidate = void;
+                                    for (Types) |type_search| {
+                                        var found_all = blk: {
+                                            @setEvalBranchQuota(2108350);
+                                            for (basis[0..basis_count]) |basis_val| {
+                                                var found_basis = false;
+                                                for (type_search.Mask) |type_val| {
+                                                    if (type_val == basis_val) {
+                                                        found_basis = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if (!found_basis) {
+                                                    break :blk false;
+                                                }
+                                            }
+                                            break :blk true;
+                                        };
+                                        if (found_all) {
+                                            if (current_candidate == void or current_candidate.Count > type_search.Count) {
+                                                current_candidate = type_search;
+                                            }
+                                        }
+                                    }
+                                    if (current_candidate == void) return Alg;
+                                    candidate = current_candidate;
+                                }
+                            }
+                        }
+
+                        // ????
+                        if (candidate == void) return Alg;
+
+                        return candidate;
+                    }
+
+                    const hodge_op = struct {
+                        pub const Res = .{
+                            .{@as([Alg.Count]Alg.Type, Alg.shuffle_mask)},
+                            .{@as([Alg.Count]Alg.Type, Alg.hodge_mask)},
+                        };
+                    };
+
+                    pub const HodgeResult = unaryOperationResult(hodge_op, BladeType);
 
                     const shuffle_mask = blk: {
                         const Size = HodgeResult.Count;
@@ -238,75 +350,67 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                     }
 
                     pub fn grade_involution(a: BladeType) BladeType {
-                        const mask: @Vector(Count, Alg.Type) = comptime blk: {
-                            var temp: [Count]Alg.Type = undefined;
-                            for (&temp, 0..) |*val, i| {
-                                const len = Alg.Indices[Mask[i]].count;
-                                if (len % 2 == 0) {
-                                    val.* = 1;
-                                } else {
-                                    val.* = -1;
-                                }
-                            }
-                            break :blk temp;
-                        };
+                        const mask: @Vector(Count, Alg.Type) = comptime @shuffle(Alg.Type, Alg.grade_involution_mask, zero_blade, Mask);
 
                         return BladeType{ .val = a.val * mask };
                     }
 
                     pub fn reverse(a: BladeType) BladeType {
-                        const mask: @Vector(Count, Alg.Type) = comptime blk: {
-                            var temp: [Count]Alg.Type = undefined;
-                            for (&temp, 0..) |*val, i| {
-                                const len = Alg.Indices[Mask[i]].count;
-                                if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
-                                    val.* = 1;
+                        const mask: @Vector(Count, Alg.Type) = comptime @shuffle(Alg.Type, Alg.reverse_mask, .{0} ** BladeType.Count, Mask);
+
+                        return BladeType{ .val = a.val * mask };
+                    }
+
+                    fn projection_op(comptime k: usize) type {
+                        const mask = blk: {
+                            var temp: [Alg.Count]i32 = undefined;
+                            for (&temp, 0..) |*m, i| {
+                                if (MaskTo[i] != -1) {
+                                    m.* = i;
                                 } else {
-                                    val.* = -1;
+                                    m.* = -1;
                                 }
                             }
                             break :blk temp;
                         };
 
-                        return BladeType{ .val = a.val * mask };
+                        return struct {
+                            pub const Res = .{
+                                .{mask},
+                                .{@as([Alg.Count]Alg.Type, Alg.getGradeMask(k))},
+                            };
+                        };
                     }
 
-                    pub fn grade_projection(a: BladeType, comptime k_in: usize) Types[k_in] {
-                        const ResType = Types[k_in];
+                    pub fn grade_projection(a: BladeType, comptime k_in: usize) unaryOperationResult(projection_op(k_in), BladeType) {
+                        const ResType = unaryOperationResult(projection_op(k_in), BladeType);
                         const neverweres = ResType{ .val = .{0} ** ResType.Count };
 
                         if (BladeType == ResType) return a;
 
-                        if (BladeType == Types[Alg.SumDim + 1]) {
-                            var res = ResType{};
-                            const mask: @Vector(ResType.Count, Alg.Type) = comptime blk: {
-                                var temp: [ResType.Count]Alg.Type = undefined;
-                                for (0..ResType.Count) |i| {
-                                    const len = Alg.Indices[ResType.Mask[i]].count;
-                                    if (len == k_in) {
-                                        temp[i] = ResType.MaskTo[ResType.Mask[i]];
-                                    } else {
-                                        temp[i] = -1;
-                                    }
+                        var res = ResType{};
+                        const mask: @Vector(ResType.Count, Alg.Type) = comptime blk: {
+                            var temp: [ResType.Count]Alg.Type = undefined;
+                            for (0..ResType.Count) |i| {
+                                const len = Alg.Indices[ResType.Mask[i]].count;
+                                if (len == k_in) {
+                                    temp[i] = BladeType.MaskTo[ResType.Mask[i]];
+                                } else {
+                                    temp[i] = -1;
                                 }
-                                break :blk temp;
-                            };
-                            res.val = @shuffle(Alg.Type, a.val, neverweres.val, mask);
+                            }
+                            break :blk temp;
+                        };
+                        res.val = @shuffle(Alg.Type, a.val, neverweres.val, mask);
 
-                            return res;
-                        }
-                        return neverweres;
+                        return res;
                     }
 
                     pub fn abs2(a: BladeType) BladeType {
                         return a.reverse().mul(a).grade_projection(0) catch unreachable;
                     }
 
-                    pub fn anticommuteResult(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, comptime a: type, comptime b: type) type {
-                        @setEvalBranchQuota(1219541);
-
-                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
-
+                    pub fn binaryOperationsResult(comptime op: anytype, comptime a: type, comptime b: type) type {
                         const res = op.Res;
 
                         var basis: [Alg.BasisNum * 20]usize = undefined;
@@ -316,8 +420,8 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
                         if (b.AlgebraType == .FullAlgebra) return b;
 
-                        for (res[0], res[1]) |sel_a, sel_b| {
-                            top_loop: for (sel_a, sel_b, 0..) |val_a, val_b, i| {
+                        for (res[0], res[1], res[2]) |sel_a, sel_b, sel_m| {
+                            for (sel_a, sel_b, sel_m, 0..) |val_a, val_b, op_sign, i| {
                                 if (val_a == -1 or val_b == -1) continue;
 
                                 var cond = false;
@@ -340,12 +444,13 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
                                 if (!cond) continue;
 
-                                const op_sign = comptime Alg.memoizedMultiplyBasis(quadratic_form, val_a, val_b)[1];
                                 if (op_sign != 0) {
                                     basis[basis_count] = i;
                                     basis_count += 1;
+                                    var current_candidate = void;
                                     for (Types) |type_search| {
                                         var found_all = blk: {
+                                            @setEvalBranchQuota(2108350);
                                             for (basis[0..basis_count]) |basis_val| {
                                                 var found_basis = false;
                                                 for (type_search.Mask) |type_val| {
@@ -361,11 +466,13 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                                             break :blk true;
                                         };
                                         if (found_all) {
-                                            candidate = type_search;
-                                            continue :top_loop;
+                                            if (current_candidate == void or current_candidate.Count > type_search.Count) {
+                                                current_candidate = type_search;
+                                            }
                                         }
                                     }
-                                    return Alg;
+                                    if (current_candidate == void) return Alg;
+                                    candidate = current_candidate;
                                 }
                             }
                         }
@@ -404,15 +511,12 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                         return anticommute_blade(.pos, Alg.commonMatrix, a, b);
                     }
 
-                    pub fn anticommute_blade(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, a: anytype, b: anytype) anticommuteResult(quadratic_form, filterMat, @TypeOf(a), @TypeOf(b)) {
-                        const a_t = @TypeOf(a);
-                        const b_t = @TypeOf(b);
-                        const Result = anticommuteResult(quadratic_form, filterMat, a_t, b_t);
-
-                        var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
-
+                    pub fn anticommuteResult(comptime quadratic_form: anytype, comptime filterMat: anytype, comptime a_t: type, comptime b_t: type) type {
                         const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
+                        return binaryOperationsResult(op, a_t, b_t);
+                    }
 
+                    pub fn transformOperations(comptime Result: type, comptime a_t: type, comptime b_t: type, comptime op: anytype) type {
                         const ops = comptime ops_blk: {
                             var op_a: [op.Res[0].len][Result.Count]i32 = undefined;
                             var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
@@ -452,6 +556,21 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
                             break :ops_blk .{ op_a, op_b, op_m };
                         };
+                        return struct {
+                            pub const Res = ops;
+                        };
+                    }
+
+                    pub fn anticommute_blade(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, a: anytype, b: anytype) anticommuteResult(quadratic_form, filterMat, @TypeOf(a), @TypeOf(b)) {
+                        const a_t = @TypeOf(a);
+                        const b_t = @TypeOf(b);
+
+                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
+                        const Result = binaryOperationsResult(op, a_t, b_t);
+
+                        const ops = transformOperations(Result, a_t, b_t, op).Res;
+
+                        var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
 
                         operations.runOps(ops, a, b, &c);
 
@@ -504,4 +623,20 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
     }
 
     return BladesBare(Alg, buff, masks);
+}
+
+test "grade_proj" {
+    const Alg = geo.Algebra(i32, 3, 0, 0);
+    const blades = Blades(Alg, .{ .{ 1, 2 }, .{ 3, 4 }, .{ 1, 2, 3, 4 } }).Types;
+
+    const Type12 = blades[blades.len - 3];
+    const Type34 = blades[blades.len - 2];
+    const Type1234 = blades[blades.len - 1];
+
+    const a = Type12{ .val = .{ 1, 1 } };
+    const b = Type34{ .val = .{ 1, 1 } };
+    const c = Type1234{ .val = .{ 1, 1, 1, 1 } };
+
+    try std.testing.expectEqualSlices(i32, &a.val, &a.grade_projection(1).val);
+    try std.testing.expectEqualSlices(i32, &c.val, &a.add(b).val);
 }

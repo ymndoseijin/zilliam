@@ -648,39 +648,53 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             _ = b;
             return Self;
         }
+        pub const grade_involution_mask: @Vector(basis_num + 1, T) = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (&temp, 0..) |*val, i| {
+                const len = indices[i].count;
+                if (len % 2 == 0) {
+                    val.* = 1;
+                } else {
+                    val.* = -1;
+                }
+            }
+            break :blk temp;
+        };
 
         pub fn grade_involution(a: Self) Self {
-            const mask: @Vector(basis_num + 1, T) = comptime blk: {
-                var temp: [basis_num + 1]T = undefined;
-                for (&temp, 0..) |*val, i| {
-                    const len = indices[i].count;
-                    if (len % 2 == 0) {
-                        val.* = 1;
-                    } else {
-                        val.* = -1;
-                    }
-                }
-                break :blk temp;
-            };
-
-            return Self{ .val = a.val * mask };
+            return Self{ .val = a.val * grade_involution_mask };
         }
 
+        pub const reverse_mask: @Vector(basis_num + 1, T) = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (&temp, 0..) |*val, i| {
+                const len = indices[i].count;
+                if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
+                    val.* = 1;
+                } else {
+                    val.* = -1;
+                }
+            }
+            break :blk temp;
+        };
+
         pub fn reverse(a: Self) Self {
-            const mask: @Vector(basis_num + 1, T) = comptime blk: {
+            return Self{ .val = a.val * reverse_mask };
+        }
+
+        pub fn getGradeMask(k: usize) @Vector(basis_num + 1, T) {
+            return blk: {
                 var temp: [basis_num + 1]T = undefined;
                 for (&temp, 0..) |*val, i| {
                     const len = indices[i].count;
-                    if (len % 4 == 0 or (len > 0 and (len - 1) % 4 == 0)) {
+                    if (len == k) {
                         val.* = 1;
                     } else {
-                        val.* = -1;
+                        val.* = 0;
                     }
                 }
                 break :blk temp;
             };
-
-            return Self{ .val = a.val * mask };
         }
 
         pub fn grade_projection(a: Self, k_in: usize) !Self {
@@ -691,18 +705,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     return error.InvalidK;
                 },
                 inline else => |k| {
-                    const mask: @Vector(basis_num + 1, T) = comptime blk: {
-                        var temp: [basis_num + 1]T = undefined;
-                        for (&temp, 0..) |*val, i| {
-                            const len = indices[i].count;
-                            if (len == k) {
-                                val.* = 1;
-                            } else {
-                                val.* = 0;
-                            }
-                        }
-                        break :blk temp;
-                    };
+                    const mask: @Vector(basis_num + 1, T) = comptime getGradeMask(k);
                     res.val = a.val * mask;
                 },
             }
@@ -760,7 +763,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return a.unhodge();
         }
 
-        const shuffle_mask: @Vector(basis_num + 1, T) = blk: {
+        pub const shuffle_mask: @Vector(basis_num + 1, T) = blk: {
             var temp: [basis_num + 1]i32 = undefined;
             for (0..basis_num + 1) |i| {
                 temp[i] = basis_num - i;
@@ -768,28 +771,30 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             break :blk temp;
         };
 
+        pub const hodge_mask = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (0..basis_num + 1) |i| {
+                const res = memoizedMultiplyBasis(.pos, i, basis_num - i);
+                temp[basis_num - i] = res[1];
+            }
+            break :blk temp;
+        };
+
+        pub const unhodge_mask = blk: {
+            var temp: [basis_num + 1]T = undefined;
+            for (0..basis_num + 1) |i| {
+                const res = memoizedMultiplyBasis(.pos, basis_num - i, i);
+                temp[basis_num - i] = res[1];
+            }
+            break :blk temp;
+        };
+
         pub fn hodge(a: Self) Self {
-            const mask: @Vector(basis_num + 1, T) = comptime blk: {
-                var temp: [basis_num + 1]T = undefined;
-                for (0..basis_num + 1) |i| {
-                    const res = memoizedMultiplyBasis(.pos, i, basis_num - i);
-                    temp[basis_num - i] = res[1];
-                }
-                break :blk temp;
-            };
-            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * mask };
+            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * hodge_mask };
         }
 
         pub fn unhodge(a: Self) Self {
-            const mask: @Vector(basis_num + 1, T) = comptime blk: {
-                var temp: [basis_num + 1]T = undefined;
-                for (0..basis_num + 1) |i| {
-                    const res = memoizedMultiplyBasis(.pos, basis_num - i, i);
-                    temp[basis_num - i] = res[1];
-                }
-                break :blk temp;
-            };
-            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * mask };
+            return Self{ .val = @shuffle(T, a.val, undefined, shuffle_mask) * unhodge_mask };
         }
 
         // ?

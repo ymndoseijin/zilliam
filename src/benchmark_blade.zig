@@ -6,7 +6,7 @@ const getBlades = @import("blades.zig").Blades;
 
 const Alg = Algebra(f32, 3, 0, 1);
 const Blades = getBlades(Alg, .{});
-const Types = Blades.Types;
+const Types = Blades.FormatTypes;
 
 const Vector = Types[1];
 const Bivector = Types[2];
@@ -32,7 +32,8 @@ pub fn main() !void {
                 var b = Bivector{};
                 b.val[b_i] = 1;
 
-                checksum += @call(.never_inline, mul_abi, .{ .{ .val = a.val }, .{ .val = b.val } }).val;
+                const res = @call(.never_inline, mul_abi, .{ .{ .val = a.val }, .{ .val = b.val } }).val;
+                checksum += res;
             }
         }
     }

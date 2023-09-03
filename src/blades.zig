@@ -616,6 +616,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
     return struct {
         pub const Types = types;
+        pub const FormatTypes = types[Alg.Count..];
 
         pub const geoCtx = simpleCtx(struct {
             pub const UnOp = enum { @"#", @"~", @"-", @"*", @"%" };

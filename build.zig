@@ -19,7 +19,6 @@ pub fn build(b: *std.Build) void {
 
     inline for (.{
         .{ "src/main.zig", "zilliam" },
-        .{ "src/mandelbrot.zig", "mandelbrot" },
         .{ "src/benchmark_f32.zig", "benchmark-f32" },
         .{ "src/benchmark_vec.zig", "benchmark-vec" },
         .{ "src/benchmark_blade.zig", "benchmark-blade" },

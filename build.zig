@@ -10,8 +10,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    _ = b.addModule("zilliam", .{
+        .source_file = std.Build.FileSource.relative("src/geo.zig"),
+        .dependencies = &.{
+            .{ .name = "comath", .module = comath_dep.module("comath") },
+        },
+    });
+
     inline for (.{
         .{ "src/main.zig", "zilliam" },
+        .{ "src/mandelbrot.zig", "mandelbrot" },
         .{ "src/benchmark_f32.zig", "benchmark-f32" },
         .{ "src/benchmark_vec.zig", "benchmark-vec" },
         .{ "src/benchmark_blade.zig", "benchmark-blade" },

@@ -100,7 +100,7 @@ fn basisRecursion(comptime dim: usize, start: usize, num: usize, length: usize, 
         return;
     }
 
-    inline for (start + 1..dim + 1) |i| {
+    for (start + 1..dim + 1) |i| {
         var nums: [dim]usize = .{0} ** dim;
         for (tags, &nums) |val, *ptr| {
             ptr.* = val;
@@ -145,13 +145,13 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
     const indices: [basis_num + 1]Data = blk: {
         var temp: [basis_num + 1]Data = undefined;
         temp[0] = .{ .tags = .{}, .count = 0 };
+
+        @setEvalBranchQuota(basis_num * basis_num);
         for (getBasis([basis_num]Data, sum_of_dim), 0..) |basis, i| {
             temp[i + 1] = basis;
         }
         break :blk temp;
     };
-
-    @setEvalBranchQuota(1219541);
 
     const identity = comptime std.simd.iota(i32, basis_num + 1);
     return struct {

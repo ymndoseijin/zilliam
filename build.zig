@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
 
-    inline for (.{ "src/geo.zig", "src/blades.zig" }) |name| {
+    inline for (.{ "src/geo.zig", "src/pga.zig", "src/blades.zig" }) |name| {
         const unit_tests = b.addTest(.{
             .root_source_file = .{ .path = name },
             .target = target,

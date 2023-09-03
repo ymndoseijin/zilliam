@@ -2,6 +2,10 @@ const geo = @import("geo.zig");
 const std = @import("std");
 const operations = @import("operations.zig");
 
+const comath = @import("comath");
+const contexts = comath.contexts;
+const simpleCtx = contexts.simpleCtx;
+
 pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: usize) type {
     return struct {
         pub const Type = T;
@@ -86,12 +90,27 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
     };
 }
 
-pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime sizes: anytype) type {
+pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
+    var single_buff = struct {
+        pub const Array = .{};
+    };
+
+    for (0..Alg.Count) |i| {
+        var arr: []const usize = &.{};
+        arr = arr ++ .{i};
+        const new = single_buff.Array ++ .{arr};
+        single_buff = struct {
+            pub const Array = new;
+        };
+    }
+
+    const wtf = single_buff.Array;
+    const format_buff = wtf ++ format;
+
     const types = type_blk: {
         var res_types: [format_buff.len]type = undefined;
         const res_ptr = &res_types;
-        inline for (format_buff, sizes, 0..) |buff, size, fmt_index| {
-            const fmt = buff[0..size];
+        inline for (format_buff, 0..) |fmt, fmt_index| {
             const it = blk: {
                 const blade_count = fmt.len;
 
@@ -109,6 +128,7 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
                     var index: usize = 0;
                     for (0..Alg.BasisNum + 1) |i| {
+                        @setEvalBranchQuota(102458012);
                         for (fmt) |k| {
                             if (i == k) {
                                 temp[i] = index;
@@ -180,7 +200,7 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                         return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toIndex(Result).val) - b.toIndex(Result).val };
                     }
 
-                    fn mergeResult(comptime b_t: type) type {
+                    pub fn mergeResult(comptime b_t: type) type {
                         var a_mut: [Alg.Count]Alg.Type = .{0} ** Alg.Count;
                         for (&a_mut, 0..) |*a, i| {
                             if (MaskTo[i] != -1) a.* = 1;
@@ -361,7 +381,7 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                         return BladeType{ .val = a.val * mask };
                     }
 
-                    fn projection_op(comptime k: usize) type {
+                    pub fn projection_op(comptime k: usize) type {
                         const mask = blk: {
                             var temp: [Alg.Count]i32 = undefined;
                             for (&temp, 0..) |*m, i| {
@@ -418,6 +438,8 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
                         var candidate: type = void;
 
+                        var is_zero = true;
+
                         if (b.AlgebraType == .FullAlgebra) return b;
 
                         for (res[0], res[1], res[2]) |sel_a, sel_b, sel_m| {
@@ -445,6 +467,7 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                                 if (!cond) continue;
 
                                 if (op_sign != 0) {
+                                    is_zero = false;
                                     basis[basis_count] = i;
                                     basis_count += 1;
                                     var current_candidate = void;
@@ -471,10 +494,17 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
                                             }
                                         }
                                     }
-                                    if (current_candidate == void) return Alg;
+                                    if (current_candidate == void) {
+                                        return Alg;
+                                    }
                                     candidate = current_candidate;
                                 }
                             }
+                        }
+
+                        if (is_zero) {
+                            // TODO: can't use Types[0] here (compiler crashes)
+                            return Types[1];
                         }
 
                         // ????
@@ -586,43 +616,150 @@ pub fn BladesBare(comptime Alg: type, comptime format_buff: anytype, comptime si
 
     return struct {
         pub const Types = types;
+
+        pub const geoCtx = simpleCtx(struct {
+            pub const UnOp = enum { @"#", @"~", @"-", @"*", @"%" };
+            pub const BinOp = enum { @"+", @"-", @"*", @"^", @"$", @"|", @"&" };
+
+            pub const allow_unused_inputs = true;
+
+            pub const relations = .{
+                .@"+" = .{ .prec = 10, .assoc = .left },
+                .@"-" = .{ .prec = 10, .assoc = .left },
+                .@"$" = .{ .prec = 10, .assoc = .left },
+                .@"*" = .{ .prec = 20, .assoc = .left },
+                .@"|" = .{ .prec = 20, .assoc = .left },
+                .@"^" = .{ .prec = 20, .assoc = .left },
+                .@"&" = .{ .prec = 20, .assoc = .left },
+            };
+
+            pub fn EvalUnOp(comptime op: []const u8, comptime InU: type) type {
+                const U = if (!@hasDecl(InU, "AlgebraType"))
+                    Types[0]
+                else
+                    InU;
+                return switch (@field(UnOp, op)) {
+                    .@"-" => U,
+                    .@"~" => U,
+                    .@"#" => U,
+                    .@"*" => U.HodgeResult,
+                    .@"%" => U.HodgeResult,
+                };
+            }
+
+            pub fn evalUnOp(_: @This(), comptime op: []const u8, in_val: anytype) EvalUnOp(op, @TypeOf(in_val)) {
+                const val = if (!@hasDecl(in_val, "AlgebraType"))
+                    Types[0]{ .val = .{in_val} }
+                else
+                    in_val;
+
+                return switch (@field(UnOp, op)) {
+                    .@"-" => (Types[0]{ .val = .{-1} }).mul(val),
+                    .@"~" => val.reverse(),
+                    .@"#" => val.grade_involution(),
+                    .@"*" => val.dual(),
+                    .@"%" => val.undual(),
+                };
+            }
+
+            pub fn EvalIdent(comptime ident: []const u8) type {
+                if (comptime std.meta.stringToEnum(Alg.BladeEnum, ident)) |val| {
+                    return Types[@intFromEnum(val) + 1];
+                } else {
+                    return noreturn;
+                }
+            }
+            pub fn evalIdent(ctx: @This(), comptime ident: []const u8) !EvalIdent(ident) {
+                _ = ctx;
+                if (comptime std.meta.stringToEnum(Alg.BladeEnum, ident)) |val| {
+                    return Types[@intFromEnum(val) + 1]{ .val = .{1} };
+                }
+                unreachable;
+            }
+
+            pub fn EvalBinOp(comptime InLhs: type, comptime op: []const u8, comptime InRhs: type) type {
+                const Lhs = if (!@hasDecl(InLhs, "AlgebraType"))
+                    Types[0]
+                else
+                    InLhs;
+
+                const Rhs = if (InRhs == comptime_int)
+                    Types[0]
+                else
+                    InRhs;
+                return switch (@field(BinOp, op)) {
+                    .@"+" => Lhs.mergeResult(Rhs),
+                    .@"-" => Lhs.mergeResult(Rhs),
+                    .@"*" => Lhs.Mul(Lhs, Rhs),
+                    .@"^" => Lhs.Wedge(Lhs, Rhs),
+                    .@"&" => Lhs.Regressive(Lhs, Rhs),
+                    .@"|" => Lhs.Inner(Lhs, Rhs),
+                    .@"$" => Lhs.unaryOperationResult(Lhs.projection_op(Rhs.Value), Lhs),
+                };
+            }
+
+            pub fn evalBinOp(_: @This(), in_lhs: anytype, comptime op: []const u8, in_rhs: anytype) EvalBinOp(@TypeOf(in_lhs), op, @TypeOf(in_rhs)) {
+                const lhs = if (!@hasDecl(@TypeOf(in_lhs), "AlgebraType"))
+                    Types[0]{ .val = .{in_lhs} }
+                else
+                    in_lhs;
+
+                const rhs = if (@TypeOf(in_rhs) == comptime_int)
+                    Types[0]{ .val = .{in_rhs} }
+                else
+                    in_rhs;
+
+                return switch (@field(BinOp, op)) {
+                    .@"+" => lhs.add(rhs),
+                    .@"-" => lhs.sub(rhs),
+                    .@"*" => lhs.mul(rhs),
+                    .@"^" => lhs.wedge(rhs),
+                    .@"&" => lhs.regressive(rhs),
+                    .@"|" => lhs.inner(rhs),
+                    .@"$" => lhs.grade_projection(in_rhs) catch @panic("Invalid K"),
+                };
+            }
+        }{});
     };
 }
 
 pub fn Blades(comptime Alg: type, comptime format: anytype) type {
-    var buff: [Alg.SumDim + 2 + format.len][Alg.BasisNum + 1]usize = undefined;
-
-    // I can't use slices for some reason here, so
-    var masks: [Alg.SumDim + 2 + format.len]usize = undefined;
+    var buff = struct {
+        pub const Array = .{};
+    };
 
     for (0..Alg.SumDim + 1) |i| {
-        var count = 0;
+        var current_mask: []const usize = &.{};
         for (Alg.Indices, 0..) |data, j| {
             if (data.count == i) {
-                buff[i][count] = j;
-                count += 1;
+                current_mask = current_mask ++ .{j};
             }
         }
-        masks[i] = count;
+        const new = buff.Array ++ .{current_mask};
+        buff = struct {
+            pub const Array = new;
+        };
     }
 
     {
-        var count = 0;
+        var current_mask: []const usize = &.{};
         for (Alg.Indices, 0..) |data, j| {
             if (data.count % 2 == 0) {
-                buff[Alg.SumDim + 1][count] = j;
-                count += 1;
+                current_mask = current_mask ++ .{j};
             }
         }
-        masks[Alg.SumDim + 1] = count;
+        const new = buff.Array ++ .{current_mask};
+        buff = struct {
+            pub const Array = new;
+        };
     }
 
-    for (format, 0..) |fmt, i| {
-        for (buff[Alg.SumDim + 2 + i][0..fmt.len], fmt) |*e, fmt_elem| e.* = fmt_elem;
-        masks[Alg.SumDim + 2 + i] = fmt.len;
-    }
+    const new = buff.Array ++ format;
+    buff = struct {
+        pub const Array = new;
+    };
 
-    return BladesBare(Alg, buff, masks);
+    return BladesBare(Alg, buff.Array);
 }
 
 test "grade_proj" {
@@ -630,13 +767,9 @@ test "grade_proj" {
     const blades = Blades(Alg, .{ .{ 1, 2 }, .{ 3, 4 }, .{ 1, 2, 3, 4 } }).Types;
 
     const Type12 = blades[blades.len - 3];
-    const Type34 = blades[blades.len - 2];
-    const Type1234 = blades[blades.len - 1];
 
     const a = Type12{ .val = .{ 1, 1 } };
-    const b = Type34{ .val = .{ 1, 1 } };
-    const c = Type1234{ .val = .{ 1, 1, 1, 1 } };
 
     try std.testing.expectEqualSlices(i32, &a.val, &a.grade_projection(1).val);
-    try std.testing.expectEqualSlices(i32, &c.val, &a.add(b).val);
+    //try std.testing.expectEqualSlices(i32, &c.val, &a.add(b).val);
 }

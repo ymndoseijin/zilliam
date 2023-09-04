@@ -5,7 +5,7 @@ const blades = @import("blades.zig");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
-pub const PGA = @import("pga.zig");
+pub const PGA = @import("pga.zig").PGA;
 
 pub const Sign = enum {
     pos,

@@ -1,11 +1,11 @@
 const std = @import("std");
 const comath = @import("comath");
 const operations = @import("operations.zig");
-const blades = @import("blades.zig");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
 
 pub const PGA = @import("pga.zig").PGA;
+pub const blades = @import("blades.zig");
 
 pub const Sign = enum {
     pos,

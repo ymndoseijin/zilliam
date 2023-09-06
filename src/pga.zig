@@ -148,8 +148,8 @@ test "3D PGA" {
     std.debug.print("\n{s}\n", .{try L.wedge(A).print(&buf)});
     std.debug.print("\nOC: {s} ({any})\n", .{ try O.regressive(C).print(&buf), O.regressive(C) });
     std.debug.print("\nOCB: {s} ({any})\n", .{ try O.regressive(C).regressive(B).print(&buf), O.regressive(C).regressive(B) });
-    var res = try comath.eval("e01*e02", Pga.Blades.geoCtx, .{});
-    std.debug.print("\n{any}\n", .{res});
+    //var res = try comath.eval("e01*e02", Pga.Blades.geoCtx, .{});
+    //std.debug.print("\n{any}\n", .{res});
 
     //std.debug.print("\n{any}\n", .{try comath.eval("e01+e02+e03", Pga.Blades.geoCtx, .{})});
 }

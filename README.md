@@ -1,6 +1,12 @@
 # zilliam
 
-This is a work in progress, but currently generates any arbitrary geometric algebra of any positive, negative and null dimension in compile time.
+Zilliam is a Geometric Algebra library that generates a SIMD optimized library for any given Cl(p,q,r) algebra. It can be used for:
+
+* PGA (projective geometric algebra, for which Zilliam has a special for generating all needed mask types) where you can easily construct points, lines and planes in any dimension and do projection, rotations, intersections and more between all of them under the same syntax. It has many uses for computer graphics and physics. It can also model conformal transformations using CGA.
+* Modelling complex numbers, quaternions, dual numbers and many more other Clifford algebras under a single interface, generating SIMD optimized code for all of them. This makes it possible to use Zilliam for automatic differentiation, complex analysis
+* Calculate Lorentz boosts and more using an STA (spacetime algebra) which also provides a very useful model for doing Electrodynamics work.
+
+For all these applications, Zilliam gives you access to useful functions such as the trigonometric functions, the exponential and also useful concepts such as the Poincare dual and wedge operations. It also provides a sort of operation overloading through a [comath](https://github.com/InKryption/comath) interface, which allows you to evaluate complex expressions more easily and without much compile time cost.
 
 It currently has the following operations (syntax for the eval function):
 - a*b: geo
@@ -13,7 +19,7 @@ It currently has the following operations (syntax for the eval function):
 - a$k: grade projection
 - %a: undual
 
-It generates SIMD operations for any generic Clifford algebra for all these operations, and any generic type as well:
+It generates SIMD operations for any generic Clifford algebra for all these operations, and for any generic type as well:
 
 ```zig
 const Alg = Algebra(i32, 2, 1, 1);
@@ -79,8 +85,10 @@ pub fn main() !void {
 // ...
 ```
 
+For more examples and a guide for using Zilliam on your project, check the [wiki](https://github.com/ymndoseijin/zilliam/wiki/Examples).
+
 # Todo
-- Improve utils to generate a type for dealing wtih each flavor of geometric algebra (so PGA would have functions to generate lines, planes, etc).
+- Add more general utilities beyond just the PGA one and improve the calculation of functions
 - Eventually, hook it up to my graphics library to start doing visualizations (maybe something on par with ganja.js)
 
 # References

@@ -442,6 +442,8 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                         if (b.AlgebraType == .FullAlgebra) return b;
 
+                        @setEvalBranchQuota(Alg.Count * Alg.Count * 20);
+
                         for (res[0], res[1], res[2]) |sel_a, sel_b, sel_m| {
                             for (sel_a, sel_b, sel_m, 0..) |val_a, val_b, op_sign, i| {
                                 if (val_a == -1 or val_b == -1) continue;
@@ -473,7 +475,6 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                                     var current_candidate = void;
                                     for (Types) |type_search| {
                                         var found_all = blk: {
-                                            @setEvalBranchQuota(2108350);
                                             for (basis[0..basis_count]) |basis_val| {
                                                 var found_basis = false;
                                                 for (type_search.Mask) |type_val| {

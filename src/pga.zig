@@ -75,7 +75,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                         return temp.dual();
                     }
 
-                    pub fn get(a: Type) ReturnVec {
+                    pub fn get(a: anytype) ReturnVec {
                         if (t_i != dim - 1) {
                             var val = normalize(a);
                             var temp: ReturnVec = undefined;

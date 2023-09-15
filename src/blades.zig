@@ -443,7 +443,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                     pub fn sqrt(a: BladeType) BladeType {
                         const sign: Alg.Type = if (a.grade_projection(0).val[0] < 0) -1 else 1;
-                        return a.normalized().add(Types[1]{ .val = .{sign} }).normalized();
+                        return a.normalized().add(Types[0]{ .val = .{sign} }).normalized();
                     }
 
                     pub fn binaryOperationsResult(comptime op: anytype, comptime a: type, comptime b: type) type {

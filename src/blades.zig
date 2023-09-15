@@ -376,7 +376,8 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     }
 
                     pub fn reverse(a: BladeType) BladeType {
-                        const mask: @Vector(Count, Alg.Type) = comptime @shuffle(Alg.Type, Alg.reverse_mask, .{0} ** BladeType.Count, Mask);
+                        const nothings: [BladeType.Count]i32 = .{0} ** BladeType.Count;
+                        const mask: @Vector(Count, Alg.Type) = comptime @shuffle(Alg.Type, Alg.reverse_mask, nothings, Mask);
 
                         return BladeType{ .val = a.val * mask };
                     }
@@ -404,6 +405,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                     pub fn grade_projection(a: BladeType, comptime k_in: usize) unaryOperationResult(projection_op(k_in), BladeType) {
                         const ResType = unaryOperationResult(projection_op(k_in), BladeType);
+
                         const neverweres = ResType{ .val = .{0} ** ResType.Count };
 
                         if (BladeType == ResType) return a;
@@ -426,8 +428,22 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         return res;
                     }
 
-                    pub fn abs2(a: BladeType) BladeType {
-                        return a.reverse().mul(a).grade_projection(0) catch unreachable;
+                    pub fn abs2(a: BladeType) unaryOperationResult(Mul(BladeType, BladeType).projection_op(0), Mul(BladeType, BladeType)) {
+                        return a.reverse().mul(a).grade_projection(0);
+                    }
+
+                    pub fn norm(a: BladeType) Alg.Type {
+                        return @sqrt(@fabs(a.abs2().val[0]));
+                    }
+
+                    pub fn normalized(a: BladeType) BladeType {
+                        const mult: @Vector(BladeType.Count, Alg.Type) = @splat(1 / a.norm());
+                        return BladeType{ .val = a.val * mult };
+                    }
+
+                    pub fn sqrt(a: BladeType) BladeType {
+                        const sign: Alg.Type = if (a.grade_projection(0).val[0] < 0) -1 else 1;
+                        return a.normalized().add(Types[1]{ .val = .{sign} }).normalized();
                     }
 
                     pub fn binaryOperationsResult(comptime op: anytype, comptime a: type, comptime b: type) type {
@@ -442,7 +458,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                         if (b.AlgebraType == .FullAlgebra) return b;
 
-                        @setEvalBranchQuota(Alg.Count * Alg.Count * 20);
+                        @setEvalBranchQuota(Alg.Count * Alg.Count * 200);
 
                         for (res[0], res[1], res[2]) |sel_a, sel_b, sel_m| {
                             for (sel_a, sel_b, sel_m, 0..) |val_a, val_b, op_sign, i| {
@@ -758,7 +774,7 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
 
     const new = buff.Array ++ format;
     buff = struct {
-        pub const Array = new;
+        pub const Array = .{@as([Alg.Count]i32, std.simd.iota(i32, Alg.Count))} ++ new;
     };
 
     return BladesBare(Alg, buff.Array);
@@ -773,5 +789,4 @@ test "grade_proj" {
     const a = Type12{ .val = .{ 1, 1 } };
 
     try std.testing.expectEqualSlices(i32, &a.val, &a.grade_projection(1).val);
-    //try std.testing.expectEqualSlices(i32, &c.val, &a.add(b).val);
 }

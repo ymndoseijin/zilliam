@@ -719,6 +719,22 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             return a.reverse().mul(a).grade_projection(0) catch unreachable;
         }
 
+        pub fn norm(a: Self) Type {
+            return @sqrt(@fabs(a.abs2().val[0]));
+        }
+
+        pub fn normalized(a: Self) Self {
+            const mult: @Vector(Self.Count, Type) = @splat(1 / a.norm());
+            return Self{ .val = a.val * mult };
+        }
+
+        pub fn sqrt(a: Self) Self {
+            const sign: Type = if (a.grade_projection(0).val[0] < 0) -1 else 1;
+            var res = a.normalized();
+            res.val[0] += sign;
+            return res.normalized();
+        }
+
         pub fn print(a: Self, buff: []u8) ![]const u8 {
             var fba = std.heap.FixedBufferAllocator.init(buff);
             var alloc = fba.allocator();

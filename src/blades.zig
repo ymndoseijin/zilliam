@@ -458,7 +458,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                         if (b.AlgebraType == .FullAlgebra) return b;
 
-                        @setEvalBranchQuota(Alg.Count * Alg.Count * 200);
+                        @setEvalBranchQuota(Alg.Count * Alg.Count * Alg.Count * 200);
 
                         for (res[0], res[1], res[2]) |sel_a, sel_b, sel_m| {
                             for (sel_a, sel_b, sel_m, 0..) |val_a, val_b, op_sign, i| {

@@ -85,7 +85,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                             return temp;
                         }
 
-                        var val = normalize(a).undual();
+                        var val = normalize(a.undual()).grade_projection(1);
                         var temp: ReturnVec = undefined;
                         for (&temp, val.val[1..]) |*t, v| {
                             t.* = v;
@@ -104,7 +104,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
 
         pub fn normalize(a: anytype) @TypeOf(a) {
             const U = @TypeOf(a);
-            var coeff: @Vector(U.Count, T) = @splat(a.val[U.Count - 1]);
+            var coeff: @Vector(U.Count, T) = @splat(a.get(.e0));
             return U{ .val = a.val / coeff };
         }
     };

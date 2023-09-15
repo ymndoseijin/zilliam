@@ -57,7 +57,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
             const types_ptr = &temp_types;
             for (&temp_types, 0..) |*current_type, t_i| {
                 current_type.* = struct {
-                    pub const Type = if (t_i == dim - 1) Blades.Types[Algebra.Count + 1].HodgeResult else Blades.Types[t_i + Algebra.Count + 1];
+                    pub const Type = if (t_i == dim - 1) Blades.Types[Algebra.Count + 2].HodgeResult else Blades.Types[t_i + Algebra.Count + 2];
                     const ReturnVec = if (t_i == dim - 1) [Type.Count - 1]T else [Type.Count]T;
 
                     const ShapeTypes = types_ptr;
@@ -67,7 +67,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                     pub fn create(vec: ReturnVec) Type {
                         if (t_i != dim - 1) return .{ .val = vec };
 
-                        var temp = Blades.Types[Algebra.Count + 1]{};
+                        var temp = Blades.Types[Algebra.Count + 2]{};
                         for (0..dim) |i| {
                             temp.val[i + 1] = vec[i];
                         }
@@ -125,31 +125,4 @@ test "2D PGA" {
     try std.testing.expectEqualSlices(f32, &.{ 0.25, 0.25 }, &Point.get(D));
 }
 
-test "3D PGA" {
-    const Pga = PGA(f32, 3);
-
-    const Point = Pga.Point;
-    const A = Point.create(.{ -1, -1, -1 });
-    const B = Point.create(.{ -1, 1, 1 });
-    const C = Point.create(.{ 1, 1, 1 });
-
-    const z = 1.0;
-    const L = Point.create(.{ 0, 0, z }).regressive(Point.create(.{ 1, 0, z })).regressive(Point.create(.{ 0, 1, z }));
-
-    const AC = A.regressive(C);
-    const D = L.wedge(AC);
-
-    const O = Pga.Origin;
-
-    try std.testing.expectEqualSlices(f32, &.{ 1.0, 1.0, 1.0 }, &Point.get(D));
-    var buf: [2048]u8 = undefined;
-    std.debug.print("\n{s}\n", .{try L.print(&buf)});
-    std.debug.print("\n{s}\n", .{try A.print(&buf)});
-    std.debug.print("\n{s}\n", .{try L.wedge(A).print(&buf)});
-    std.debug.print("\nOC: {s} ({any})\n", .{ try O.regressive(C).print(&buf), O.regressive(C) });
-    std.debug.print("\nOCB: {s} ({any})\n", .{ try O.regressive(C).regressive(B).print(&buf), O.regressive(C).regressive(B) });
-    //var res = try comath.eval("e01*e02", Pga.Blades.geoCtx, .{});
-    //std.debug.print("\n{any}\n", .{res});
-
-    //std.debug.print("\n{any}\n", .{try comath.eval("e01+e02+e03", Pga.Blades.geoCtx, .{})});
-}
+test "3D PGA" {}

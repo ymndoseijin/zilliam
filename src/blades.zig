@@ -184,7 +184,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                             var temp: [result_count]i32 = .{-1} ** result_count;
                             for (0..Count) |i| {
                                 const mask_loc = ResType.MaskTo[Mask[i]];
-                                if (mask_loc == -1) @compileError("Invalid K");
+                                if (mask_loc == -1) continue;
                                 temp[@intCast(mask_loc)] = i;
                             }
                             break :blk temp;
@@ -787,11 +787,12 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
 
 test "grade_proj" {
     const Alg = geo.Algebra(i32, 3, 0, 0);
-    const blades = Blades(Alg, .{ .{ 1, 2 }, .{ 3, 4 }, .{ 1, 2, 3, 4 } }).Types;
+    const BladesType = Blades(Alg, .{ .{ 1, 2 }, .{ 3, 4 }, .{ 1, 2, 3, 4 } });
 
-    const Type12 = blades[blades.len - 3];
+    const Type12 = BladesType.Types[BladesType.Types.len - 3];
 
     const a = Type12{ .val = .{ 1, 1 } };
 
     try std.testing.expectEqualSlices(i32, &a.val, &a.grade_projection(1).val);
+    std.debug.print("{any}\n", .{geo.comath.eval("2e1+3", BladesType.geoCtx, .{})});
 }

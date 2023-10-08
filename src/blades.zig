@@ -178,7 +178,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         return getBatchTypeGen(Alg, BladeType, LenMul);
                     }
 
-                    pub fn toIndex(a: BladeType, comptime ResType: type) ResType {
+                    pub fn toType(a: BladeType, comptime ResType: type) ResType {
                         const result_count = ResType.Count;
                         const mask_a_mut = comptime blk: {
                             var temp: [result_count]i32 = .{-1} ** result_count;
@@ -197,7 +197,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         const b_t = @TypeOf(b);
                         const Result = mergeResult(b_t);
 
-                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toIndex(Result).val) - b.toIndex(Result).val };
+                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toType(Result).val) - b.toType(Result).val };
                     }
 
                     pub fn mergeResult(comptime b_t: type) type {
@@ -228,7 +228,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         const b_t = @TypeOf(b);
                         const Result = mergeResult(b_t);
 
-                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toIndex(Result).val) + b.toIndex(Result).val };
+                        return .{ .val = @as(@Vector(Result.Count, Alg.Type), a.toType(Result).val) + b.toType(Result).val };
                     }
 
                     pub fn get(a: BladeType, blade: Alg.BladeEnum) Alg.Type {
@@ -433,7 +433,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     }
 
                     pub fn norm(a: BladeType) Alg.Type {
-                        return @sqrt(@fabs(a.abs2().val[0]));
+                        return @sqrt(@abs(a.abs2().val[0]));
                     }
 
                     pub fn normalized(a: BladeType) BladeType {
@@ -605,23 +605,28 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         };
                         return struct {
                             pub const Res = ops;
+                            pub const ResType = Result;
                         };
+                    }
+
+                    pub fn anticommuteOps(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, comptime a_t: type, comptime b_t: type) type {
+                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
+                        const Result = binaryOperationsResult(op, a_t, b_t);
+
+                        return transformOperations(Result, a_t, b_t, op);
                     }
 
                     pub fn anticommute_blade(comptime quadratic_form: geo.Sign, comptime filterMat: anytype, a: anytype, b: anytype) anticommuteResult(quadratic_form, filterMat, @TypeOf(a), @TypeOf(b)) {
                         const a_t = @TypeOf(a);
                         const b_t = @TypeOf(b);
 
-                        const op = Alg.anticommuteMemoize(quadratic_form, filterMat);
-                        const Result = binaryOperationsResult(op, a_t, b_t);
+                        const ops = anticommuteOps(quadratic_form, filterMat, a_t, b_t);
 
-                        const ops = transformOperations(Result, a_t, b_t, op).Res;
+                        var c: @Vector(ops.ResType.Count, Alg.Type) = .{0} ** (ops.ResType.Count);
 
-                        var c: @Vector(Result.Count, Alg.Type) = .{0} ** (Result.Count);
+                        operations.runOps(ops.Res, a, b, &c);
 
-                        operations.runOps(ops, a, b, &c);
-
-                        return Result{ .val = c };
+                        return ops.ResType{ .val = c };
                     }
                 };
             };

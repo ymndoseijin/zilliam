@@ -100,24 +100,17 @@ pub fn runOps(comptime vals: anytype, a: anytype, b: anytype, c: anytype) void {
     const op_m = vals[2];
     const len = op_a[0].len;
 
-    const nothings: @Vector(len, i32) = .{-1} ** len;
     const Type = @TypeOf(a.val[0]);
-    inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
-        const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings);
-        const mask_m_count = comptime blk: {
-            var count: usize = 0;
-            @setEvalBranchQuota(1219541);
 
-            for (mask_m) |v| {
-                if (v == 0) count += 1;
-            }
-            break :blk count;
-        };
+    const nothings: @Vector(len, i32) = .{-1} ** len;
+    const neverweres: @Vector(len, Type) = .{0} ** len;
+    inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
+        const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings) or @reduce(.And, mask_m == neverweres);
 
         const positives: @Vector(len, Type) = .{1} ** len;
         const negatives: @Vector(len, Type) = .{-1} ** len;
 
-        if (!invalid and (mask_m_count != len)) {
+        if (!invalid) {
             var first = @shuffle(Type, a.val, a.val, mask_a);
             var second = @shuffle(Type, b.val, b.val, mask_b);
 

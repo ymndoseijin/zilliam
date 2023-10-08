@@ -1,5 +1,5 @@
 const std = @import("std");
-const comath = @import("comath");
+pub const comath = @import("comath");
 const operations = @import("operations.zig");
 const contexts = comath.contexts;
 const simpleCtx = contexts.simpleCtx;
@@ -146,7 +146,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
     const indices: [basis_num + 1]Data = blk: {
         var temp: [basis_num + 1]Data = undefined;
-        temp[0] = .{ .tags = .{}, .count = 0 };
+        temp[0] = .{ .tags = undefined, .count = 0 };
 
         @setEvalBranchQuota(basis_num * basis_num);
         for (getBasis([basis_num]Data, sum_of_dim), 0..) |basis, i| {
@@ -720,7 +720,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         pub fn norm(a: Self) Type {
-            return @sqrt(@fabs(a.abs2().val[0]));
+            return @sqrt(@abs(a.abs2().val[0]));
         }
 
         pub fn normalized(a: Self) Self {

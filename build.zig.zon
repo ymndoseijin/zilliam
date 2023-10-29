@@ -1,10 +1,15 @@
 .{
     .name = "zilliam",
     .version = "0.0.1",
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+    },
     .dependencies = .{
         .comath = .{
-            .url = "https://github.com/InKryption/comath/archive/b1b544b1521afb71471b32b2627195884e47a122.tar.gz",
-            .hash = "1220d9d95cd8aea3776edc8f99246a01dbb90df41bbf839fbe7f36a6628fed41cf1b",
+            .url = "https://github.com/InKryption/comath/archive/85a66f3477637bbc7863fa05500feb2218e54e9d.tar.gz",
+            .hash = "1220825e02ff52b2e302449d43add99c1e5ed2e45ecc17d27efb78da24f80eb6b3eb",
         },
     },
 }

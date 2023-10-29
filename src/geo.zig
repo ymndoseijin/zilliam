@@ -1,8 +1,8 @@
 const std = @import("std");
 pub const comath = @import("comath");
 const operations = @import("operations.zig");
-const contexts = comath.contexts;
-const simpleCtx = contexts.simpleCtx;
+const contexts = comath.ctx;
+const simpleCtx = contexts.Simple;
 
 pub const PGA = @import("pga.zig").PGA;
 pub const blades = @import("blades.zig");
@@ -260,21 +260,32 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         // #a: grade involution
         // a$k: grade projection this is slightly cursed I'm not sure whether I'll keep it
         // %a: undual this is also not ideal
-        pub const geoCtx = simpleCtx(struct {
+        pub const geoCtx = struct {
             pub const UnOp = enum { @"#", @"~", @"-", @"*", @"%" };
             pub const BinOp = enum { @"+", @"-", @"*", @"^", @"$", @"|", @"&" };
 
             pub const allow_unused_inputs = true;
 
             pub const relations = .{
-                .@"+" = .{ .prec = 10, .assoc = .left },
-                .@"-" = .{ .prec = 10, .assoc = .left },
-                .@"$" = .{ .prec = 10, .assoc = .left },
-                .@"*" = .{ .prec = 20, .assoc = .left },
-                .@"|" = .{ .prec = 20, .assoc = .left },
-                .@"^" = .{ .prec = 20, .assoc = .left },
-                .@"&" = .{ .prec = 20, .assoc = .left },
+                .@"+" = comath.relation(.left, 0),
+                .@"-" = comath.relation(.left, 0),
+                .@"$" = comath.relation(.left, 0),
+                .@"*" = comath.relation(.left, 1),
+                .@"|" = comath.relation(.left, 1),
+                .@"^" = comath.relation(.left, 1),
+                .@"&" = comath.relation(.left, 1),
             };
+
+            pub inline fn matchBinOp(comptime str: []const u8) bool {
+                return @hasField(BinOp, str);
+            }
+
+            pub inline fn matchUnOp(comptime str: []const u8) bool {
+                return @hasField(UnOp, str);
+            }
+
+            pub const EvalNumberLiteral = comath.ctx.DefaultEvalNumberLiteral;
+            pub const evalNumberLiteral = comath.ctx.defaultEvalNumberLiteral;
 
             pub fn EvalUnOp(comptime op: []const u8, comptime U: type) type {
                 _ = op;
@@ -327,7 +338,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     .@"$" => lhs.grade_projection(in_rhs) catch @panic("Invalid K"),
                 };
             }
-        }{});
+
+            pub inline fn orderBinOp(comptime lhs: []const u8, comptime rhs: []const u8) ?comath.Order {
+                return @field(relations, lhs).order(@field(relations, rhs));
+            }
+        }{};
 
         pub fn eval(comptime input: []const u8, comptime args: anytype) !Self {
             return try comath.eval(input, geoCtx, args);

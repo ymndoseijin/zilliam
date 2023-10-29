@@ -3,8 +3,8 @@ const std = @import("std");
 const operations = @import("operations.zig");
 
 const comath = @import("comath");
-const contexts = comath.contexts;
-const simpleCtx = contexts.simpleCtx;
+const contexts = comath.ctx;
+const simpleCtx = contexts.Simple;
 
 pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: usize) type {
     return struct {
@@ -639,110 +639,6 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
     return struct {
         pub const Types = types;
         pub const FormatTypes = types[Alg.Count..];
-
-        pub const geoCtx = simpleCtx(struct {
-            pub const UnOp = enum { @"#", @"~", @"-", @"*", @"%" };
-            pub const BinOp = enum { @"+", @"-", @"*", @"^", @"$", @"|", @"&" };
-
-            pub const allow_unused_inputs = true;
-
-            pub const relations = .{
-                .@"+" = .{ .prec = 10, .assoc = .left },
-                .@"-" = .{ .prec = 10, .assoc = .left },
-                .@"$" = .{ .prec = 10, .assoc = .left },
-                .@"*" = .{ .prec = 20, .assoc = .left },
-                .@"|" = .{ .prec = 20, .assoc = .left },
-                .@"^" = .{ .prec = 20, .assoc = .left },
-                .@"&" = .{ .prec = 20, .assoc = .left },
-            };
-
-            pub fn EvalUnOp(comptime op: []const u8, comptime InU: type) type {
-                const U = if (!@hasDecl(InU, "AlgebraType"))
-                    Types[0]
-                else
-                    InU;
-                return switch (@field(UnOp, op)) {
-                    .@"-" => U,
-                    .@"~" => U,
-                    .@"#" => U,
-                    .@"*" => U.HodgeResult,
-                    .@"%" => U.HodgeResult,
-                };
-            }
-
-            pub fn evalUnOp(_: @This(), comptime op: []const u8, in_val: anytype) EvalUnOp(op, @TypeOf(in_val)) {
-                const val = if (!@hasDecl(in_val, "AlgebraType"))
-                    Types[0]{ .val = .{in_val} }
-                else
-                    in_val;
-
-                return switch (@field(UnOp, op)) {
-                    .@"-" => (Types[0]{ .val = .{-1} }).mul(val),
-                    .@"~" => val.reverse(),
-                    .@"#" => val.grade_involution(),
-                    .@"*" => val.dual(),
-                    .@"%" => val.undual(),
-                };
-            }
-
-            pub fn EvalIdent(comptime ident: []const u8) type {
-                if (comptime std.meta.stringToEnum(Alg.BladeEnum, ident)) |val| {
-                    return Types[@intFromEnum(val) + 1];
-                } else {
-                    return noreturn;
-                }
-            }
-            pub fn evalIdent(ctx: @This(), comptime ident: []const u8) !EvalIdent(ident) {
-                _ = ctx;
-                if (comptime std.meta.stringToEnum(Alg.BladeEnum, ident)) |val| {
-                    return Types[@intFromEnum(val) + 1]{ .val = .{1} };
-                }
-                unreachable;
-            }
-
-            pub fn EvalBinOp(comptime InLhs: type, comptime op: []const u8, comptime InRhs: type) type {
-                const Lhs = if (!@hasDecl(InLhs, "AlgebraType"))
-                    Types[0]
-                else
-                    InLhs;
-
-                const Rhs = if (InRhs == comptime_int)
-                    Types[0]
-                else
-                    InRhs;
-                return switch (@field(BinOp, op)) {
-                    .@"+" => Lhs.mergeResult(Rhs),
-                    .@"-" => Lhs.mergeResult(Rhs),
-                    .@"*" => Lhs.Mul(Lhs, Rhs),
-                    .@"^" => Lhs.Wedge(Lhs, Rhs),
-                    .@"&" => Lhs.Regressive(Lhs, Rhs),
-                    .@"|" => Lhs.Inner(Lhs, Rhs),
-                    .@"$" => Lhs.unaryOperationResult(Lhs.projection_op(Rhs.Value), Lhs),
-                };
-            }
-
-            pub fn evalBinOp(_: @This(), in_lhs: anytype, comptime op: []const u8, in_rhs: anytype) EvalBinOp(@TypeOf(in_lhs), op, @TypeOf(in_rhs)) {
-                const lhs = if (!@hasDecl(@TypeOf(in_lhs), "AlgebraType"))
-                    Types[0]{ .val = .{in_lhs} }
-                else
-                    in_lhs;
-
-                const rhs = if (@TypeOf(in_rhs) == comptime_int)
-                    Types[0]{ .val = .{in_rhs} }
-                else
-                    in_rhs;
-
-                return switch (@field(BinOp, op)) {
-                    .@"+" => lhs.add(rhs),
-                    .@"-" => lhs.sub(rhs),
-                    .@"*" => lhs.mul(rhs),
-                    .@"^" => lhs.wedge(rhs),
-                    .@"&" => lhs.regressive(rhs),
-                    .@"|" => lhs.inner(rhs),
-                    .@"$" => lhs.grade_projection(in_rhs) catch @panic("Invalid K"),
-                };
-            }
-        }{});
     };
 }
 
@@ -794,5 +690,5 @@ test "grade_proj" {
     const a = Type12{ .val = .{ 1, 1 } };
 
     try std.testing.expectEqualSlices(i32, &a.val, &a.grade_projection(1).val);
-    std.debug.print("{any}\n", .{geo.comath.eval("2e1+3", BladesType.geoCtx, .{})});
+    //std.debug.print("{any}\n", .{geo.comath.eval("2e1+3", BladesType.geoCtx, .{})});
 }

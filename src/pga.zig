@@ -104,7 +104,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
 
         pub fn normalize(a: anytype) @TypeOf(a) {
             const U = @TypeOf(a);
-            var coeff: @Vector(U.Count, T) = @splat(a.get(.e0));
+            const coeff: @Vector(U.Count, T) = @splat(a.get(.e0));
             return U{ .val = a.val / coeff };
         }
     };

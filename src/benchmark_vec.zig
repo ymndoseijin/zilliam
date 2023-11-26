@@ -19,7 +19,7 @@ export fn mul_abi_vec(a: packed_vec, b: packed_vec) packed_vec {
 pub const Size = 524288 / VecSize;
 
 pub fn main() !void {
-    var checksum: @Vector(Alg.BasisNum + 1, f32) = .{0} ** (Alg.BasisNum + 1);
+    var checksum: @Vector(Alg.BasisNum + 1, f32) = @splat(0);
     for (0..Size) |i| {
         const i_v: packed_vec = blk: {
             var temp: [Alg.BasisNum + 1][VecSize]f32 = undefined;

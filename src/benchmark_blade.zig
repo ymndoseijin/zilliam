@@ -22,7 +22,7 @@ export fn mul_abi(a: packed_vec, b: packed_vec) packed_res {
 }
 
 pub fn main() !void {
-    var checksum: @Vector(Even.Count, f32) = .{0} ** Even.Count;
+    var checksum: @Vector(Even.Count, f32) = @splat(0);
 
     for (0..10000) |_| {
         for (0..Bivector.Count) |a_i| {

@@ -5,7 +5,7 @@ pub fn simplifyZeroes(vals: anytype) void {
 
     const len = op_a[0].len;
 
-    const nothings: @Vector(len, i32) = .{-1} ** len;
+    const nothings: @Vector(len, i32) = @splat(-1);
 
     for (op_a, op_b, op_m, 0..) |a_row, b_row, s_row, row_i| {
         const invalid = @reduce(.And, a_row == nothings) or @reduce(.And, b_row == nothings);
@@ -102,17 +102,17 @@ pub fn runOps(comptime vals: anytype, a: anytype, b: anytype, c: anytype) void {
 
     const Type = @TypeOf(a.val[0]);
 
-    const nothings: @Vector(len, i32) = .{-1} ** len;
-    const neverweres: @Vector(len, Type) = .{0} ** len;
+    const nothings: @Vector(len, i32) = @splat(-1);
+    const neverweres: @Vector(len, Type) = @splat(0);
     inline for (op_a, op_b, op_m) |mask_a, mask_b, mask_m| {
         const invalid = @reduce(.And, mask_a == nothings) or @reduce(.And, mask_b == nothings) or @reduce(.And, mask_m == neverweres);
 
-        const positives: @Vector(len, Type) = .{1} ** len;
-        const negatives: @Vector(len, Type) = .{-1} ** len;
+        const positives: @Vector(len, Type) = @splat(1);
+        const negatives: @Vector(len, Type) = @splat(-1);
 
         if (!invalid) {
-            var first = @shuffle(Type, a.val, a.val, mask_a);
-            var second = @shuffle(Type, b.val, b.val, mask_b);
+            const first = @shuffle(Type, a.val, a.val, mask_a);
+            const second = @shuffle(Type, b.val, b.val, mask_b);
 
             if (comptime @reduce(.And, mask_m == positives)) {
                 c.* += first * second;

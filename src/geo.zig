@@ -38,7 +38,7 @@ fn comptimePower(a: anytype, comptime i: usize) repeatType(@TypeOf(a)) {
         res.val[0] = 1;
         return res;
     }
-    var a_c = a.toIndex(repeatType(@TypeOf(a)));
+    const a_c = a.toIndex(repeatType(@TypeOf(a)));
     var loop = a_c;
     inline for (0..i - 1) |_| {
         loop = loop.mul(a_c);
@@ -190,7 +190,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
             for (indices[1 .. basis_num + 1], 0..) |basis, i| {
                 var buff: [1024]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buff);
-                var alloc = fba.allocator();
+                const alloc = fba.allocator();
                 var name = std.ArrayList(u8).init(alloc);
                 var writer = name.writer();
 
@@ -594,7 +594,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         pub fn anticommute(a: Self, comptime quadratic_form: Sign, comptime filterMat: anytype, b: Self) Self {
-            var c: @Vector(basis_num + 1, T) = .{0} ** (basis_num + 1);
+            var c: @Vector(basis_num + 1, T) = @splat(0);
 
             const op = anticommuteMemoize(quadratic_form, filterMat);
 
@@ -752,7 +752,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         pub fn print(a: Self, buff: []u8) ![]const u8 {
             var fba = std.heap.FixedBufferAllocator.init(buff);
-            var alloc = fba.allocator();
+            const alloc = fba.allocator();
             var name = std.ArrayList(u8).init(alloc);
             var writer = name.writer();
 
@@ -838,8 +838,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub fn add(a: Self, b: Self) Self {
             var r: Self = undefined;
 
-            var a_vec: @Vector(basis_num + 1, T) = a.val;
-            var b_vec: @Vector(basis_num + 1, T) = b.val;
+            const a_vec: @Vector(basis_num + 1, T) = a.val;
+            const b_vec: @Vector(basis_num + 1, T) = b.val;
             r.val = a_vec + b_vec;
 
             return r;
@@ -847,8 +847,8 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
 
         pub fn sub(a: Self, b: Self) Self {
             var r: Self = undefined;
-            var a_vec: @Vector(basis_num + 1, T) = a.val;
-            var b_vec: @Vector(basis_num + 1, T) = b.val;
+            const a_vec: @Vector(basis_num + 1, T) = a.val;
+            const b_vec: @Vector(basis_num + 1, T) = b.val;
 
             r.val = a_vec - b_vec;
 

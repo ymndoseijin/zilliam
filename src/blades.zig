@@ -169,7 +169,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     const BladeType = @This();
 
                     pub fn print(a: @This(), buf: []u8) ![]const u8 {
-                        const zeroes: @Vector(Count, Alg.Type) = .{0} ** Count;
+                        const zeroes: @Vector(Count, Alg.Type) = @splat(0);
                         var val = Alg{ .val = @shuffle(Alg.Type, a.val, zeroes, MaskTo) };
                         return val.print(buf);
                     }
@@ -270,7 +270,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                                     basis_count += 1;
                                     var current_candidate = void;
                                     for (Types) |type_search| {
-                                        var found_all = blk: {
+                                        const found_all = blk: {
                                             @setEvalBranchQuota(2108350);
                                             for (basis[0..basis_count]) |basis_val| {
                                                 var found_basis = false;
@@ -490,7 +490,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                                     basis_count += 1;
                                     var current_candidate = void;
                                     for (Types) |type_search| {
-                                        var found_all = blk: {
+                                        const found_all = blk: {
                                             for (basis[0..basis_count]) |basis_val| {
                                                 var found_basis = false;
                                                 for (type_search.Mask) |type_val| {
@@ -622,7 +622,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                         const ops = anticommuteOps(quadratic_form, filterMat, a_t, b_t);
 
-                        var c: @Vector(ops.ResType.Count, Alg.Type) = .{0} ** (ops.ResType.Count);
+                        var c: @Vector(ops.ResType.Count, Alg.Type) = @splat(0);
 
                         operations.runOps(ops.Res, a, b, &c);
 

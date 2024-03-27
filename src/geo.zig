@@ -204,8 +204,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 var res = Self{};
                 res.val[i + 1] = 1;
 
+                const null_terminated = (name.items ++ .{0})[0..name.items.len :0];
                 struct_fields[i] = .{
-                    .name = name.items,
+                    .name = null_terminated,
                     .type = Self,
                     .default_value = @ptrCast(&res),
                     .is_comptime = true,
@@ -213,14 +214,14 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                 };
 
                 enum_fields[i] = .{
-                    .name = name.items,
+                    .name = null_terminated,
                     .value = i,
                 };
             }
 
             const blade_struct = @Type(.{
                 .Struct = .{
-                    .layout = .Auto,
+                    .layout = .auto,
                     .fields = &struct_fields,
                     .decls = &.{},
                     .is_tuple = false,

@@ -125,4 +125,22 @@ test "2D PGA" {
     try std.testing.expectEqualSlices(f32, &.{ 0.25, 0.25 }, &Point.get(D));
 }
 
-test "3D PGA" {}
+test "3D PGA" {
+    const Pga = PGA(f32, 3);
+
+    const Point = Pga.Point;
+    const A = Point.create(.{ -1, -1, -1 });
+    const B = Point.create(.{ -1, 1, 1 });
+    const C = Point.create(.{ 1, 1, 1 });
+
+    const z = 1.0;
+    const L = Point.create(.{ 0, 0, z }).regressive(Point.create(.{ 1, 0, z })).regressive(Point.create(.{ 0, 1, z }));
+
+    const AC = A.regressive(C);
+    const D = L.wedge(AC);
+
+    const O = Pga.Origin;
+
+    try std.testing.expectEqualSlices(f32, &.{ 1.0, 1.0, 1.0 }, &Point.get(D));
+    try std.testing.expectEqualSlices(f32, &.{ 0, -2.0, 2.0 }, &O.regressive(C).regressive(B).val);
+}

@@ -8,8 +8,8 @@
     },
     .dependencies = .{
         .comath = .{
-            .url = "https://github.com/InKryption/comath/archive/85a66f3477637bbc7863fa05500feb2218e54e9d.tar.gz",
-            .hash = "1220825e02ff52b2e302449d43add99c1e5ed2e45ecc17d27efb78da24f80eb6b3eb",
+            .url = "https://github.com/InKryption/comath/archive/07fd1acfe20e05e260ede883b762c878e8724dac.tar.gz",
+            .hash = "1220bbc10c8f8a4ed95e44a1e79b32caebc4ebb3ae952fe1341505be45f9d176ee11",
         },
     },
 }

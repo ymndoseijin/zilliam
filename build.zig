@@ -11,8 +11,8 @@ pub fn build(b: *std.Build) void {
     });
 
     _ = b.addModule("zilliam", .{
-        .source_file = std.Build.FileSource.relative("src/geo.zig"),
-        .dependencies = &.{
+        .root_source_file = std.Build.LazyPath.relative("src/geo.zig"),
+        .imports = &.{
             .{ .name = "comath", .module = comath_dep.module("comath") },
         },
     });
@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
 
-        exe.addModule("comath", comath_dep.module("comath"));
+        exe.root_module.addImport("comath", comath_dep.module("comath"));
 
         b.installArtifact(exe);
 
@@ -48,14 +48,14 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
 
-    inline for (.{"src/blades.zig"}) |name| {
+    inline for (.{ "src/blades.zig", "src/pga.zig" }) |name| {
         const unit_tests = b.addTest(.{
             .root_source_file = .{ .path = name },
             .target = target,
             .optimize = optimize,
         });
 
-        unit_tests.addModule("comath", comath_dep.module("comath"));
+        unit_tests.root_module.addImport("comath", comath_dep.module("comath"));
 
         const run_unit_tests = b.addRunArtifact(unit_tests);
 

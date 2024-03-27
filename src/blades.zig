@@ -326,7 +326,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     pub fn unhodge(a: BladeType) HodgeResult {
                         const Size = HodgeResult.Count;
                         const mask = comptime blk: {
-                            var temp: @Vector(Size, Alg.Type) = .{-1} ** Size;
+                            var temp: @Vector(Size, Alg.Type) = @as([Size]Alg.Type, .{-1} ** Size);
 
                             for (0..Count) |i| {
                                 const other = Alg.BasisNum - Mask[i];
@@ -343,7 +343,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     pub fn hodge(a: BladeType) HodgeResult {
                         const Size = HodgeResult.Count;
                         const mask = comptime blk: {
-                            var temp: @Vector(Size, Alg.Type) = .{-1} ** Size;
+                            var temp: @Vector(Size, Alg.Type) = @as([Size]Alg.Type, .{-1} ** Size);
 
                             for (0..Count) |i| {
                                 const other = Alg.BasisNum - Mask[i];
@@ -569,7 +569,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                             var op_b: [op.Res[0].len][Result.Count]i32 = undefined;
                             var op_m: [op.Res[0].len][Result.Count]Alg.Type = undefined;
 
-                            inline for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
+                            for (op.Res[0], op.Res[1], op.Res[2], 0..) |sel_a, sel_b, mult, op_i| {
                                 const res = blk: {
                                     @setEvalBranchQuota(2108350);
                                     var mask_a_mut: [Result.Count]i32 = .{-1} ** Result.Count;

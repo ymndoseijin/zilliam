@@ -184,10 +184,10 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         }
 
         const blade_types = blk: {
-            var struct_fields: [basis_num]std.builtin.Type.StructField = undefined;
-            var enum_fields: [basis_num]std.builtin.Type.EnumField = undefined;
+            var struct_fields: [basis_num + 1]std.builtin.Type.StructField = undefined;
+            var enum_fields: [basis_num + 1]std.builtin.Type.EnumField = undefined;
 
-            for (indices[1 .. basis_num + 1], 0..) |basis, i| {
+            for (indices, 0..) |basis, i| {
                 var buff: [1024]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buff);
                 const alloc = fba.allocator();
@@ -202,9 +202,9 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     _ = writer.print("{}", .{actual}) catch unreachable;
                 }
                 var res = Self{};
-                res.val[i + 1] = 1;
+                res.val[i] = 1;
 
-                const null_terminated = (name.items ++ .{0})[0..name.items.len :0];
+                const null_terminated = if (i == 0) "scalar" else (name.items ++ .{0})[0..name.items.len :0];
                 struct_fields[i] = .{
                     .name = null_terminated,
                     .type = Self,
@@ -235,7 +235,7 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
                     }),
                     .fields = &enum_fields,
                     .decls = &.{},
-                    .is_exhaustive = false,
+                    .is_exhaustive = true,
                 },
             });
             break :blk .{ blade_struct, blade_enum };
@@ -245,11 +245,11 @@ pub fn Algebra(comptime T: type, comptime pos_dim: usize, comptime neg_dim: usiz
         pub const BladeEnum = blade_types[1];
 
         pub fn get(a: Self, blade: BladeEnum) T {
-            return a.val[@intFromEnum(blade) + 1];
+            return a.val[@intFromEnum(blade)];
         }
 
         pub fn set(a: *Self, blade: BladeEnum, val: T) void {
-            a.val[@intFromEnum(blade) + 1] = val;
+            a.val[@intFromEnum(blade)] = val;
         }
 
         // a*b: geo

@@ -164,6 +164,16 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         break :blk temp;
                     };
 
+                    pub const Format = blk: {
+                        var enums: [blade_count]Alg.BladeEnum = undefined;
+
+                        for (&enums, blade_mask) |*e, v| {
+                            e.* = @enumFromInt(v);
+                        }
+
+                        break :blk enums;
+                    };
+
                     val: [Count]Alg.Type = .{0} ** Count,
 
                     const BladeType = @This();
@@ -232,11 +242,11 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     }
 
                     pub fn get(a: BladeType, blade: Alg.BladeEnum) Alg.Type {
-                        return a.val[@intCast(MaskTo[@intFromEnum(blade) + 1])];
+                        return a.val[@intCast(MaskTo[@intFromEnum(blade)])];
                     }
 
                     pub fn set(a: *BladeType, blade: Alg.BladeEnum, val: Alg.Type) void {
-                        a.val[@intCast(MaskTo[@intFromEnum(blade) + 1])] = val;
+                        a.val[@intCast(MaskTo[@intFromEnum(blade)])] = val;
                     }
 
                     pub const zero_blade: @Vector(BladeType.Count, Alg.Type) = .{0} ** BladeType.Count;
@@ -678,14 +688,19 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
         pub const Array = .{@as([Alg.Count]i32, std.simd.iota(i32, Alg.Count))} ++ new;
     };
 
-    return BladesBare(Alg, buff.Array);
+    const Bare = BladesBare(Alg, buff.Array);
+
+    return struct {
+        pub const Types = Bare.Types[0 .. Bare.Types.len - format.len];
+        pub const FormatTypes = Bare.FormatTypes[Bare.FormatTypes.len - format.len ..];
+    };
 }
 
 test "grade_proj" {
     const Alg = geo.Algebra(i32, 3, 0, 0);
     const BladesType = Blades(Alg, .{ .{ 1, 2 }, .{ 3, 4 }, .{ 1, 2, 3, 4 } });
 
-    const Type12 = BladesType.Types[BladesType.Types.len - 3];
+    const Type12 = BladesType.FormatTypes[0];
 
     const a = Type12{ .val = .{ 1, 1 } };
 

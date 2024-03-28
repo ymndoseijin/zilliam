@@ -50,7 +50,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
 
         pub const Blades = blades.Blades(Algebra, extra_masks);
 
-        pub const Origin = Blades.Types[Blades.Types.len - 1]{ .val = .{1} };
+        pub const Origin = Blades.FormatTypes[Blades.FormatTypes.len - 1]{ .val = .{1} };
 
         pub const Types = blk: {
             var temp_types: [dim]type = undefined;
@@ -72,6 +72,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                             temp.val[i + 1] = vec[i];
                         }
                         temp.val[0] = 1;
+
                         return temp.dual();
                     }
 
@@ -114,6 +115,7 @@ test "2D PGA" {
     const Pga = PGA(f32, 2);
 
     const Point = Pga.Point;
+
     const A = Point.create(.{ -1, -1 });
     const C = Point.create(.{ 1, 1 });
 

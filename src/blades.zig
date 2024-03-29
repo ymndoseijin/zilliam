@@ -109,7 +109,6 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
     const types = type_blk: {
         var res_types: [format_buff.len]type = undefined;
-        const res_ptr = &res_types;
         inline for (format_buff, 0..) |fmt, fmt_index| {
             const it = blk: {
                 const blade_count = fmt.len;
@@ -147,7 +146,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
 
                     pub const Idx = fmt_index;
 
-                    pub const Types = res_ptr;
+                    pub const Types = BladesBare(Alg, format).Types;
                     pub const Identity: BladeType = .{ .val = .{1} ** Count };
                     pub const Algebra = Alg;
                     pub const AlgebraType = geo.AlgebraEnum.SubAlgebra;

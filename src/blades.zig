@@ -91,25 +91,9 @@ pub fn getBatchTypeGen(comptime Alg: type, comptime T: type, comptime len_mul: u
 }
 
 pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
-    var single_buff = struct {
-        pub const Array = .{};
-    };
-
-    for (0..Alg.Count) |i| {
-        var arr: []const usize = &.{};
-        arr = arr ++ .{i};
-        const new = single_buff.Array ++ .{arr};
-        single_buff = struct {
-            pub const Array = new;
-        };
-    }
-
-    const wtf = single_buff.Array;
-    const format_buff = wtf ++ format;
-
     const types = type_blk: {
-        var res_types: [format_buff.len]type = undefined;
-        inline for (format_buff, 0..) |fmt, fmt_index| {
+        var res_types: [format.len]type = undefined;
+        inline for (format, 0..) |fmt, fmt_index| {
             const it = blk: {
                 const blade_count = fmt.len;
 
@@ -139,7 +123,7 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                     break :mask_blk temp;
                 };
 
-                break :blk struct {
+                const BladeStruct = struct {
                     pub const Mask = blade_mask;
                     pub const MaskTo = blade_mask_to;
                     pub const Count = blade_count;
@@ -529,7 +513,6 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         }
 
                         if (is_zero) {
-                            // TODO: can't use Types[0] here (compiler crashes)
                             return Types[1];
                         }
 
@@ -638,16 +621,18 @@ pub fn BladesBare(comptime Alg: type, comptime format: anytype) type {
                         return ops.ResType{ .val = c };
                     }
                 };
+
+                break :blk BladeStruct;
             };
             res_types[fmt_index] = it;
         }
 
-        break :type_blk res_types;
+        const final = res_types;
+        break :type_blk final;
     };
 
     return struct {
         pub const Types = types;
-        pub const FormatTypes = types[Alg.Count..];
     };
 }
 
@@ -656,6 +641,31 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
         pub const Array = .{};
     };
 
+    // single elements
+    for (0..Alg.Count) |i| {
+        var arr: []const usize = &.{};
+        arr = arr ++ .{i};
+        const new = buff.Array ++ .{arr};
+
+        buff = struct {
+            pub const Array = new;
+        };
+    }
+
+    const single_len = buff.Array.len;
+    const full_idx = buff.Array.len;
+
+    // full elements
+    {
+        const new = buff.Array ++ .{@as([Alg.Count]i32, std.simd.iota(i32, Alg.Count))};
+        buff = struct {
+            pub const Array = new;
+        };
+    }
+
+    const all_idx = buff.Array.len;
+
+    // all blades
     for (0..Alg.SumDim + 1) |i| {
         var current_mask: []const usize = &.{};
         for (Alg.Indices, 0..) |data, j| {
@@ -669,6 +679,10 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
         };
     }
 
+    const all_len = buff.Array.len;
+    const even_idx = buff.Array.len;
+
+    // even subalgebra
     {
         var current_mask: []const usize = &.{};
         for (Alg.Indices, 0..) |data, j| {
@@ -682,16 +696,25 @@ pub fn Blades(comptime Alg: type, comptime format: anytype) type {
         };
     }
 
-    const new = buff.Array ++ format;
-    buff = struct {
-        pub const Array = .{@as([Alg.Count]i32, std.simd.iota(i32, Alg.Count))} ++ new;
-    };
+    const format_idx = buff.Array.len;
+
+    // formats
+    {
+        const new = buff.Array ++ format;
+        buff = struct {
+            pub const Array = new;
+        };
+    }
 
     const Bare = BladesBare(Alg, buff.Array);
 
     return struct {
-        pub const Types = Bare.Types[0 .. Bare.Types.len - format.len];
-        pub const FormatTypes = Bare.FormatTypes[Bare.FormatTypes.len - format.len ..];
+        pub const Single = Bare.Types[0..single_len];
+        pub const Full = Bare.Types[full_idx];
+        pub const Blades = Bare.Types[all_idx..all_len];
+        pub const Even = Bare.Types[even_idx];
+        pub const FormatTypes = Bare.Types[format_idx..];
+        pub const Types = Bare.Types;
     };
 }
 

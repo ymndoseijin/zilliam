@@ -56,7 +56,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
             var temp_types: [dim]type = undefined;
             for (&temp_types, 0..) |*current_type, t_i| {
                 current_type.* = struct {
-                    pub const Type = if (t_i == dim - 1) Blades.Types[Algebra.Count + 2].HodgeResult else Blades.Types[t_i + Algebra.Count + 2];
+                    pub const Type = if (t_i == dim - 1) Blades.Blades[1].HodgeResult else Blades.Blades[t_i + 1];
                     const ReturnVec = if (t_i == dim - 1) [Type.Count - 1]T else [Type.Count]T;
 
                     const ShapeTypes = PGA(T, dim).Types;
@@ -66,7 +66,7 @@ pub fn PGA(comptime T: type, comptime dim: usize) type {
                     pub fn create(vec: ReturnVec) Type {
                         if (t_i != dim - 1) return .{ .val = vec };
 
-                        var temp = Blades.Types[Algebra.Count + 2]{};
+                        var temp = Blades.Blades[1]{};
                         for (0..dim) |i| {
                             temp.val[i + 1] = vec[i];
                         }

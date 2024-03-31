@@ -1,5 +1,10 @@
 const std = @import("std");
 
+pub const geo = @import("src/geo.zig");
+pub const PGA = @import("src/pga.zig").PGA;
+pub const glsl_gen = @import("src/glsl_gen.zig");
+pub const blades = @import("src/blades.zig");
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 

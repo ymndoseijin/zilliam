@@ -94,6 +94,13 @@ pub fn simplifySwap(vals: anytype) void {
     }
 }
 
+// vals is a tuple with three members:
+// the first is a list of masks for masking the a variable
+// the second is a list of masks for masking the b variable
+// and the last is a list of vectors that multiplies each mask
+//
+// they are multiplied in order, masking both a and b variables,
+// multiplying them and summing to the result variables
 pub fn runOps(comptime vals: anytype, a: anytype, b: anytype, c: anytype) void {
     const op_a = vals[0];
     const op_b = vals[1];
